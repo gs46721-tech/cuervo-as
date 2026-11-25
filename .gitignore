@@ -1,4 +1,6 @@
 .venv/
+editor/node_modules/
+editor/dist/
 __pycache__/
 *.py[cod]
 .pytest_cache/
