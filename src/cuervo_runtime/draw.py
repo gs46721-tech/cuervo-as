@@ -30,7 +30,7 @@ def render_png(
         if not actor.visible:
             continue
         controls = controls_at(shot, actor.actor_id, frame, library)
-        _draw_actor(draw, actor, controls)
+        _draw_actor(draw, actor, controls, _camera_pan(shot))
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
@@ -40,7 +40,15 @@ def shot_background(episode: Episode, shot: Shot) -> str:
     for ref in shot.asset_refs:
         if ref.role == "background":
             return ref.asset_id
-    return episode.scenes[0].setting_id
+    for scene in episode.scenes:
+        if scene.scene_id == shot.scene_id:
+            return scene.setting_id
+    raise ValueError(f"{shot.shot_id} has no background")
+
+
+def _camera_pan(shot: Shot) -> tuple[int, int]:
+    transform = shot.camera.transform
+    return (int(transform.x * 0.5), int(transform.y * 0.25))
 
 
 def _swatch(key: str) -> tuple[int, int, int]:
@@ -55,14 +63,21 @@ def _camera_frame(draw: ImageDraw.ImageDraw, shot: Shot) -> None:
     draw.rectangle((left, top, WIDTH - left - 1, HEIGHT - 20), outline=(255, 255, 255))
 
 
-def _draw_actor(draw: ImageDraw.ImageDraw, actor, controls: dict[str, float]) -> None:
-    origin_x = int(WIDTH / 2 + actor.stage.x * 0.7 + controls["root"] * 20)
-    origin_y = int(HEIGHT * 0.72 - actor.stage.y * 0.4 - controls["torso"] * 16)
+def _draw_actor(draw: ImageDraw.ImageDraw, actor, controls: dict[str, float], pan: tuple[int, int]) -> None:
+    origin_x = int(WIDTH / 2 + actor.stage.x * 0.7 + controls["root"] * 20 - pan[0])
+    origin_y = int(HEIGHT * 0.72 - actor.stage.y * 0.4 - controls["torso"] * 16 + pan[1])
     color = _swatch(actor.character_id)
     facing = -1 if "left" in actor.facing else 1
-    leg = 28 + int(controls["leg_l"] * 10)
-    draw.line((origin_x - 10, origin_y, origin_x - 10, origin_y + leg), fill=color, width=4)
-    draw.line((origin_x + 10, origin_y, origin_x + 10, origin_y + leg), fill=color, width=4)
+    draw.line(
+        (origin_x - 10, origin_y, origin_x - 10, origin_y + 28 + int(controls["leg_l"] * 10)),
+        fill=color,
+        width=4,
+    )
+    draw.line(
+        (origin_x + 10, origin_y, origin_x + 10, origin_y + 28 + int(controls["leg_r"] * 10)),
+        fill=color,
+        width=4,
+    )
     torso_box = (origin_x - 16, origin_y - 48, origin_x + 16, origin_y)
     draw.rectangle(torso_box, fill=color)
     arm_y = origin_y - 36
@@ -91,7 +106,10 @@ class FramePlayer:
 
     def __init__(self, episode: Episode, shot_id: str, library: dict[str, dict[str, float]] | None = None):
         self.episode = episode
-        self.shot = next(shot for scene in episode.scenes for shot in scene.shots if shot.shot_id == shot_id)
+        matches = [shot for scene in episode.scenes for shot in scene.shots if shot.shot_id == shot_id]
+        if len(matches) != 1:
+            raise ValueError(f"expected one shot {shot_id}, found {len(matches)}")
+        self.shot = matches[0]
         self.library = library
         self.frame = 0
 

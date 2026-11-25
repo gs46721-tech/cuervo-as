@@ -15,4 +15,4 @@ Score each candidate on the same reference scene once a rig exists:
 | Determinism | Does the same shot JSON produce the same frames on two machines? |
 | Headless | Can a worker step one frame at a time with no window? |
 
-Do not pick a runtime in this slice. Integrating one is the next slice after this foundation.
+`cuervo_runtime` is the headless preview from week 2. The scorecard above is still open for Rive, Spine, and PixiJS. This slice does not lock the product to one of them.

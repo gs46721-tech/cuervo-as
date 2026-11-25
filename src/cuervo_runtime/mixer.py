@@ -32,19 +32,26 @@ def controls_at(
 
 
 def _pose_values(track: ActionTrack, frame: int, library) -> dict[str, float]:
-    chosen = track.keyframes[0]
-    for key in track.keyframes:
+    keys = sorted(track.keyframes, key=lambda key: key.frame)
+    chosen = keys[0]
+    for key in keys:
         if key.frame <= frame:
             chosen = key
-        elif track.interpolation != "stepped":
-            span = key.frame - chosen.frame
-            if span <= 0:
-                break
-            weight = (frame - chosen.frame) / span
-            start = resolve_pose(chosen.pose, library)
-            end = resolve_pose(key.pose, library)
-            names = set(start) | set(end)
-            return {name: start.get(name, 0.0) + (end.get(name, 0.0) - start.get(name, 0.0)) * weight for name in names}
-        else:
+            continue
+        if track.interpolation == "stepped":
             break
+        span = key.frame - chosen.frame
+        if span <= 0:
+            break
+        weight = _ease((frame - chosen.frame) / span, track.interpolation)
+        start = resolve_pose(chosen.pose, library)
+        end = resolve_pose(key.pose, library)
+        names = set(start) | set(end)
+        return {name: start.get(name, 0.0) + (end.get(name, 0.0) - start.get(name, 0.0)) * weight for name in names}
     return resolve_pose(chosen.pose, library)
+
+
+def _ease(weight: float, interpolation: str) -> float:
+    if interpolation == "ease_in_out":
+        return weight * weight * (3 - 2 * weight)
+    return weight

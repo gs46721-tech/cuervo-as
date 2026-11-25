@@ -16,7 +16,10 @@ def main() -> None:
     parser.add_argument("-o", "--output", type=Path, required=True)
     args = parser.parse_args()
     episode = Episode.model_validate(json.loads(Path(args.episode).read_text(encoding="utf-8")))
-    shot = next(shot for scene in episode.scenes for shot in scene.shots if shot.shot_id == args.shot)
+    matches = [shot for scene in episode.scenes for shot in scene.shots if shot.shot_id == args.shot]
+    if len(matches) != 1:
+        raise SystemExit(f"expected one shot {args.shot}, found {len(matches)}")
+    shot = matches[0]
     library = json.loads(args.poses.read_text(encoding="utf-8")) if args.poses else None
     args.output.write_bytes(render_png(episode, shot, args.frame, library))
 

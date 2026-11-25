@@ -19,6 +19,28 @@ def test_generic_episode_renders_deterministically():
     assert first.startswith(b"\x89PNG")
 
 
+def test_camera_and_each_leg_change_the_frame():
+    episode = solo_episode()
+    shot = episode.scenes[0].shots[0]
+    base = render_png(episode, shot, 0)
+    shot.camera.transform.x = 120
+    assert render_png(episode, shot, 0) != base
+    shot.camera.transform.x = 0
+    shot.action_tracks[0].mask = ["leg_l", "leg_r", "mouth"]
+    left = render_png(episode, shot, 0, {"hold": {"leg_l": 1, "leg_r": -1}})
+    right = render_png(episode, shot, 0, {"hold": {"leg_l": -1, "leg_r": 1}})
+    assert left != right
+
+
+def test_missing_shot_is_an_error():
+    try:
+        FramePlayer(solo_episode(), "sh_missing")
+    except ValueError as exc:
+        assert "sh_missing" in str(exc)
+    else:
+        raise AssertionError("missing shot was accepted")
+
+
 def test_player_steps_and_sample_blink_changes_pixels():
     episode = build_reference_episode()
     player = FramePlayer(episode, "sh_establish", POSES)
