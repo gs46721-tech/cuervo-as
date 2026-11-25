@@ -1,3 +1,5 @@
+"""Checks for the sample episode. Engine rules live in test_engine.py."""
+
 import json
 from pathlib import Path
 

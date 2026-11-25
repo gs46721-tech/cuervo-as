@@ -1,4 +1,4 @@
-# Living room
+# Sample set: living room
 
 Asset `bg_living_room` version 1.0.0. Location id `loc_living_room`. One set, reused by every shot in the reference scene.
 

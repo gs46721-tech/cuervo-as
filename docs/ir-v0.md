@@ -43,7 +43,7 @@ That conversion is `cuervo_ir.frame_time`. The reference mix is 24 fps and 48 kH
 
 ## Timing patch
 
-`examples/hold-reaction-12.patch.json` is the blueprint's example: hold Nia's reaction 12 more frames.
+`examples/hold-reaction-12.patch.json` is a sample timing edit against the sample episode: hold one reaction 12 more frames. The same patch shape applies to any shot id and track id.
 
 `apply_timing_patch` requires the shot's current revision, refuses a track whose lock includes `timing`, and then:
 

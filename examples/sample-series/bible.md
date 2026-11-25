@@ -1,4 +1,6 @@
-# Series bible (reference)
+# Sample series bible
+
+This file is sample data for one made-up show. Cuervo does not ship it as the product. A user supplies their own bible.
 
 Working title for the reference episode: **Five Minutes**. One scene. The bible is only the facts that scene is allowed to use.
 

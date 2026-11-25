@@ -1,4 +1,6 @@
-# Characters
+# Sample characters
+
+Sample data only. The engine accepts any character ids that follow the rig contract.
 
 Two characters. Both are rigged to `cuervo.rig.v0`. Extensions are listed in the episode library and here.
 
@@ -20,4 +22,4 @@ On the couch he is the right figure, three-quarter facing left, stage x = 180 px
 
 ## Identity in the scene
 
-Every shot instances the same actor ids (`act_nia`, `act_cole`), the same rig instances, the same stage transforms, and the same facing. Cuts are camera changes. The acceptance test fails if a shot moves either of them.
+Every shot in this sample instances the same actor ids (`act_nia`, `act_cole`), the same rig instances, the same stage transforms, and the same facing. Cuts are camera changes. The sample fixture test checks that this particular episode does not move them.

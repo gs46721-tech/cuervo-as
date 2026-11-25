@@ -1,6 +1,6 @@
 # Style guide
 
-Traditional television sitcom animation. Persistent model sheets, limited animation, reusable locations, expressive poses, deliberate pauses. The reference scene is the only picture this slice defines.
+Default picture rules for a traditional television sitcom. A series supplies its own bible, characters, and sets as data. These rules are the product default, not one show.
 
 ## Picture
 

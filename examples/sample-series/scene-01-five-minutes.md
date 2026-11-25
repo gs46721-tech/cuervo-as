@@ -1,4 +1,4 @@
-# Scene 01 — Five Minutes
+# Sample scene — Five Minutes
 
 32 seconds at 24 fps (768 frames). Dialogue-heavy. Two people, one room. The authoritative timing is `examples/reference-scene.json`. This page is the script those tracks transcribe.
 

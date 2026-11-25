@@ -1,7 +1,7 @@
 [project]
 name = "cuervo-ir"
 version = "0.1.0"
-description = "Phase 0 Animation IR for Cuervo, an AI-native 2D sitcom studio."
+description = "Animation IR and model router for Cuervo, software for any 2D sitcom series."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
