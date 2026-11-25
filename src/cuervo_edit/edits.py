@@ -127,6 +127,8 @@ def _apply_posed_and_camera(episode: Episode, patch: EditPatch) -> Episode:
         for key in track["keyframes"]:
             key["pose"] = edit.pose
     if patch.camera is not None:
+        if any("camera" in properties for properties in locks.values()):
+            raise EditError("camera is locked")
         if patch.camera.preset is not None:
             shot["camera"]["preset"] = patch.camera.preset
         if patch.camera.x is not None:

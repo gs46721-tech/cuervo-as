@@ -43,6 +43,7 @@ def propose_edit(episode: Episode, shot_id: str, instruction: str, router: Provi
                     "base_revision": shot.provenance.revision,
                     "tracks": tracks,
                     "camera_preset": shot.camera.preset,
+                    "locks": [lock.model_dump(mode="json") for lock in shot.locks],
                 }
             ),
             response_schema=EditPatch.model_json_schema(),

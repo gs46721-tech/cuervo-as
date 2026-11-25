@@ -135,6 +135,19 @@ def test_locked_pose_and_wrong_shot_are_rejected():
             }
             return ModelResponse(provider="claude", model="stub", text=json.dumps(body))
 
+    locked_camera = stage_episode()
+    locked_camera.scenes[0].shots[0].locks.append(
+        Lock(lock_id="lock_camera", target_track_id="tr_body", properties=["camera"])
+    )
+    locked_camera = Episode.model_validate(locked_camera.model_dump())
+    camera_patch = propose_edit(locked_camera, "sh_main", "cut to a close up", _router())
+    try:
+        apply_edit(locked_camera, camera_patch)
+    except EditError as exc:
+        assert "camera" in str(exc)
+    else:
+        raise AssertionError("locked camera was edited")
+
     try:
         propose_edit(episode, "sh_main", "cut to a close up", ProviderRouter({"claude": WrongShot()}))
     except EditError as exc:
