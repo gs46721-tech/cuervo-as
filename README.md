@@ -1,1 +1,29 @@
-# cuervo-as
+# Cuervo
+
+Software for producing editable 2D sitcom episodes. A series bible, characters, sets, and scripts are data a project supplies. The engine, the Animation IR schema, and the APIs do not embed one show.
+
+Phase 0 is the intermediate representation, the rig contract, and a provider router. `examples/reference-scene.json` and `examples/sample-series/` are one sample episode used by tests. They are not the product.
+
+The technical blueprint is [`docs/ai-animation-studio-blueprint.pdf`](docs/ai-animation-studio-blueprint.pdf).
+
+## Layout
+
+| Path | Contents |
+| --- | --- |
+| `docs/` | Blueprint, product style guide, rig contract, IR notes, provider routes |
+| `schemas/animation-ir-v0.schema.json` | JSON Schema generated from the models |
+| `src/cuervo_ir/` | IR models, timing patches, and the Claude / Cursor / Gemini router |
+| `examples/` | Sample episode and sample series notes |
+| `tests/` | Engine tests on a generic fixture, plus sample-episode tests |
+
+## Validate
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest
+python3 -m cuervo_ir examples/reference-scene.json
+```
+
+Provider keys stay in the environment. See [`docs/providers.md`](docs/providers.md).

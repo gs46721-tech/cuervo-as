@@ -1,0 +1,972 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gs46721-tech/cuervo-as/schemas/animation-ir-v0.schema.json",
+  "title": "AnimationIRv0",
+  "description": "Phase 0 Animation IR. An episode document or a timing patch. Timeline fields are integer frames.",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "episode",
+          "title": "Kind",
+          "type": "string"
+        },
+        "episode_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Episode Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "fps": {
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "assets": {
+          "$ref": "#/$defs/AssetLibrary"
+        },
+        "scenes": {
+          "items": {
+            "$ref": "#/$defs/Scene"
+          },
+          "minItems": 1,
+          "title": "Scenes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "episode_id",
+        "version",
+        "title",
+        "fps",
+        "assets",
+        "scenes"
+      ],
+      "title": "Episode",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "A schema-valid timing edit.\n\nThe patch names the tracks it may move and how far the shot duration\ngrows. It does not carry pose, camera, or dialogue text changes.",
+      "properties": {
+        "kind": {
+          "const": "timing_patch",
+          "title": "Kind",
+          "type": "string"
+        },
+        "patch_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Patch Id",
+          "type": "string"
+        },
+        "target_shot_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Target Shot Id",
+          "type": "string"
+        },
+        "base_revision": {
+          "pattern": "^rev-[0-9]{4,}$",
+          "title": "Base Revision",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "timing": {
+          "items": {
+            "$ref": "#/$defs/TimingDelta"
+          },
+          "minItems": 1,
+          "title": "Timing",
+          "type": "array"
+        },
+        "extend_shot_frames": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Extend Shot Frames",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "patch_id",
+        "target_shot_id",
+        "base_revision",
+        "reason",
+        "timing"
+      ],
+      "title": "TimingPatch",
+      "type": "object"
+    }
+  ],
+  "$defs": {
+    "ActionKeyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "minimum": 0,
+          "title": "Frame",
+          "type": "integer"
+        },
+        "pose": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Pose",
+          "type": "string"
+        },
+        "weight": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "frame",
+        "pose"
+      ],
+      "title": "ActionKeyframe",
+      "type": "object"
+    },
+    "ActionTrack": {
+      "additionalProperties": false,
+      "properties": {
+        "track_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Track Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "pose",
+            "gesture",
+            "gaze",
+            "expression",
+            "locomotion",
+            "secondary"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "target_actor_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Target Actor Id",
+          "type": "string"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "end_frame": {
+          "minimum": 0,
+          "title": "End Frame",
+          "type": "integer"
+        },
+        "interpolation": {
+          "enum": [
+            "stepped",
+            "linear",
+            "ease_in_out"
+          ],
+          "title": "Interpolation",
+          "type": "string"
+        },
+        "mask": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{1,63}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Mask",
+          "type": "array"
+        },
+        "priority": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "blend_mode": {
+          "enum": [
+            "override",
+            "additive"
+          ],
+          "title": "Blend Mode",
+          "type": "string"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/ActionKeyframe"
+          },
+          "minItems": 1,
+          "title": "Keyframes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "track_id",
+        "kind",
+        "target_actor_id",
+        "start_frame",
+        "end_frame",
+        "interpolation",
+        "mask",
+        "priority",
+        "blend_mode",
+        "keyframes"
+      ],
+      "title": "ActionTrack",
+      "type": "object"
+    },
+    "Actor": {
+      "additionalProperties": false,
+      "properties": {
+        "actor_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "character_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Character Id",
+          "type": "string"
+        },
+        "rig_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Rig Id",
+          "type": "string"
+        },
+        "rig_instance_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Rig Instance Id",
+          "type": "string"
+        },
+        "stage": {
+          "$ref": "#/$defs/Transform"
+        },
+        "facing": {
+          "enum": [
+            "front",
+            "three_quarter_left",
+            "three_quarter_right",
+            "side_left",
+            "side_right",
+            "back"
+          ],
+          "title": "Facing",
+          "type": "string"
+        },
+        "depth": {
+          "title": "Depth",
+          "type": "integer"
+        },
+        "visible": {
+          "default": true,
+          "title": "Visible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "actor_id",
+        "character_id",
+        "rig_id",
+        "rig_instance_id",
+        "stage",
+        "facing",
+        "depth"
+      ],
+      "title": "Actor",
+      "type": "object"
+    },
+    "AssetLibrary": {
+      "additionalProperties": false,
+      "properties": {
+        "characters": {
+          "items": {
+            "$ref": "#/$defs/CharacterAsset"
+          },
+          "minItems": 1,
+          "title": "Characters",
+          "type": "array"
+        },
+        "rigs": {
+          "items": {
+            "$ref": "#/$defs/RigAsset"
+          },
+          "minItems": 1,
+          "title": "Rigs",
+          "type": "array"
+        },
+        "backgrounds": {
+          "items": {
+            "$ref": "#/$defs/BackgroundAsset"
+          },
+          "minItems": 1,
+          "title": "Backgrounds",
+          "type": "array"
+        },
+        "props": {
+          "items": {
+            "$ref": "#/$defs/PropAsset"
+          },
+          "title": "Props",
+          "type": "array"
+        }
+      },
+      "required": [
+        "characters",
+        "rigs",
+        "backgrounds"
+      ],
+      "title": "AssetLibrary",
+      "type": "object"
+    },
+    "AssetRef": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "character",
+            "rig",
+            "background",
+            "prop"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "asset_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "asset_id",
+        "version"
+      ],
+      "title": "AssetRef",
+      "type": "object"
+    },
+    "BackgroundAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "display_name": {
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "location_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Location Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset_id",
+        "version",
+        "display_name",
+        "location_id"
+      ],
+      "title": "BackgroundAsset",
+      "type": "object"
+    },
+    "Camera": {
+      "additionalProperties": false,
+      "properties": {
+        "preset": {
+          "enum": [
+            "wide",
+            "two_shot",
+            "over_the_shoulder",
+            "close_up",
+            "reaction",
+            "insert"
+          ],
+          "title": "Preset",
+          "type": "string"
+        },
+        "framing": {
+          "minLength": 1,
+          "title": "Framing",
+          "type": "string"
+        },
+        "transform": {
+          "$ref": "#/$defs/Transform"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/CameraKeyframe"
+          },
+          "title": "Keyframes",
+          "type": "array"
+        },
+        "constraints": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Constraints",
+          "type": "array"
+        }
+      },
+      "required": [
+        "preset",
+        "framing",
+        "transform"
+      ],
+      "title": "Camera",
+      "type": "object"
+    },
+    "CameraKeyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "minimum": 0,
+          "title": "Frame",
+          "type": "integer"
+        },
+        "transform": {
+          "$ref": "#/$defs/Transform"
+        }
+      },
+      "required": [
+        "frame",
+        "transform"
+      ],
+      "title": "CameraKeyframe",
+      "type": "object"
+    },
+    "CharacterAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "display_name": {
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "rig_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Rig Id",
+          "type": "string"
+        },
+        "rig_version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Rig Version",
+          "type": "string"
+        },
+        "extension_poses": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{1,63}$",
+            "type": "string"
+          },
+          "title": "Extension Poses",
+          "type": "array"
+        },
+        "extension_controllers": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{1,63}$",
+            "type": "string"
+          },
+          "title": "Extension Controllers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "asset_id",
+        "version",
+        "display_name",
+        "rig_id",
+        "rig_version"
+      ],
+      "title": "CharacterAsset",
+      "type": "object"
+    },
+    "DialogueTrack": {
+      "additionalProperties": false,
+      "properties": {
+        "track_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Track Id",
+          "type": "string"
+        },
+        "speaker_actor_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Speaker Actor Id",
+          "type": "string"
+        },
+        "line_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Line Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "voice_take_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Take Id"
+        },
+        "voice_take_version": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Take Version"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "end_frame": {
+          "minimum": 0,
+          "title": "End Frame",
+          "type": "integer"
+        },
+        "alignment": {
+          "items": {},
+          "maxItems": 0,
+          "title": "Alignment",
+          "type": "array"
+        },
+        "visemes": {
+          "items": {},
+          "maxItems": 0,
+          "title": "Visemes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "track_id",
+        "speaker_actor_id",
+        "line_id",
+        "text",
+        "start_frame",
+        "end_frame"
+      ],
+      "title": "DialogueTrack",
+      "type": "object"
+    },
+    "Lock": {
+      "additionalProperties": false,
+      "properties": {
+        "lock_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Lock Id",
+          "type": "string"
+        },
+        "target_track_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Target Track Id",
+          "type": "string"
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "timing",
+              "pose",
+              "camera",
+              "dialogue"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Properties"
+        }
+      },
+      "required": [
+        "lock_id",
+        "target_track_id",
+        "properties"
+      ],
+      "title": "Lock",
+      "type": "object"
+    },
+    "PropAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "display_name": {
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset_id",
+        "version",
+        "display_name"
+      ],
+      "title": "PropAsset",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "pattern": "^rev-[0-9]{4,}$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "parent_revision": {
+          "anyOf": [
+            {
+              "pattern": "^rev-[0-9]{4,}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Revision"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "note": {
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision",
+        "source",
+        "note"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "RigAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "character_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Character Id",
+          "type": "string"
+        },
+        "contract": {
+          "const": "cuervo.rig.v0",
+          "default": "cuervo.rig.v0",
+          "title": "Contract",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset_id",
+        "version",
+        "character_id"
+      ],
+      "title": "RigAsset",
+      "type": "object"
+    },
+    "Scene": {
+      "additionalProperties": false,
+      "properties": {
+        "scene_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Scene Id",
+          "type": "string"
+        },
+        "episode_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Episode Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "objective": {
+          "minLength": 1,
+          "title": "Objective",
+          "type": "string"
+        },
+        "setting_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Setting Id",
+          "type": "string"
+        },
+        "emotional_trajectory": {
+          "minLength": 1,
+          "title": "Emotional Trajectory",
+          "type": "string"
+        },
+        "continuity": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Continuity",
+          "type": "array"
+        },
+        "target_runtime_frames": {
+          "minimum": 1,
+          "title": "Target Runtime Frames",
+          "type": "integer"
+        },
+        "shots": {
+          "items": {
+            "$ref": "#/$defs/Shot"
+          },
+          "minItems": 1,
+          "title": "Shots",
+          "type": "array"
+        }
+      },
+      "required": [
+        "scene_id",
+        "episode_id",
+        "title",
+        "objective",
+        "setting_id",
+        "emotional_trajectory",
+        "continuity",
+        "target_runtime_frames",
+        "shots"
+      ],
+      "title": "Scene",
+      "type": "object"
+    },
+    "Shot": {
+      "additionalProperties": false,
+      "properties": {
+        "shot_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Shot Id",
+          "type": "string"
+        },
+        "scene_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Scene Id",
+          "type": "string"
+        },
+        "fps": {
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "duration_frames": {
+          "minimum": 1,
+          "title": "Duration Frames",
+          "type": "integer"
+        },
+        "asset_refs": {
+          "items": {
+            "$ref": "#/$defs/AssetRef"
+          },
+          "minItems": 1,
+          "title": "Asset Refs",
+          "type": "array"
+        },
+        "camera": {
+          "$ref": "#/$defs/Camera"
+        },
+        "actors": {
+          "items": {
+            "$ref": "#/$defs/Actor"
+          },
+          "minItems": 1,
+          "title": "Actors",
+          "type": "array"
+        },
+        "action_tracks": {
+          "items": {
+            "$ref": "#/$defs/ActionTrack"
+          },
+          "title": "Action Tracks",
+          "type": "array"
+        },
+        "dialogue_tracks": {
+          "items": {
+            "$ref": "#/$defs/DialogueTrack"
+          },
+          "title": "Dialogue Tracks",
+          "type": "array"
+        },
+        "locks": {
+          "items": {
+            "$ref": "#/$defs/Lock"
+          },
+          "title": "Locks",
+          "type": "array"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        }
+      },
+      "required": [
+        "shot_id",
+        "scene_id",
+        "fps",
+        "start_frame",
+        "duration_frames",
+        "asset_refs",
+        "camera",
+        "actors",
+        "action_tracks",
+        "dialogue_tracks",
+        "provenance"
+      ],
+      "title": "Shot",
+      "type": "object"
+    },
+    "Transform": {
+      "additionalProperties": false,
+      "properties": {
+        "space": {
+          "enum": [
+            "stage",
+            "camera",
+            "local"
+          ],
+          "title": "Space",
+          "type": "string"
+        },
+        "unit": {
+          "const": "px",
+          "title": "Unit",
+          "type": "string"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "rotation_deg": {
+          "default": 0,
+          "title": "Rotation Deg",
+          "type": "number"
+        },
+        "scale": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "title": "Scale",
+          "type": "number"
+        }
+      },
+      "required": [
+        "space",
+        "unit",
+        "x",
+        "y"
+      ],
+      "title": "Transform",
+      "type": "object"
+    },
+    "TimingDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "track_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Track Id",
+          "type": "string"
+        },
+        "start_delta_frames": {
+          "default": 0,
+          "title": "Start Delta Frames",
+          "type": "integer"
+        },
+        "end_delta_frames": {
+          "default": 0,
+          "title": "End Delta Frames",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "track_id"
+      ],
+      "title": "TimingDelta",
+      "type": "object"
+    }
+  }
+}
