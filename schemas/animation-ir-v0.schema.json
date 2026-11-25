@@ -293,6 +293,46 @@
       "title": "Actor",
       "type": "object"
     },
+    "AlignmentSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "start_sample": {
+          "minimum": 0,
+          "title": "Start Sample",
+          "type": "integer"
+        },
+        "end_sample": {
+          "minimum": 1,
+          "title": "End Sample",
+          "type": "integer"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "phoneme": {
+          "minLength": 1,
+          "title": "Phoneme",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "start_sample",
+        "end_sample",
+        "text",
+        "phoneme",
+        "confidence"
+      ],
+      "title": "AlignmentSpan",
+      "type": "object"
+    },
     "AssetLibrary": {
       "additionalProperties": false,
       "properties": {
@@ -581,14 +621,16 @@
           "type": "integer"
         },
         "alignment": {
-          "items": {},
-          "maxItems": 0,
+          "items": {
+            "$ref": "#/$defs/AlignmentSpan"
+          },
           "title": "Alignment",
           "type": "array"
         },
         "visemes": {
-          "items": {},
-          "maxItems": 0,
+          "items": {
+            "$ref": "#/$defs/VisemeKey"
+          },
           "title": "Visemes",
           "type": "array"
         }
@@ -941,6 +983,43 @@
         "y"
       ],
       "title": "Transform",
+      "type": "object"
+    },
+    "VisemeKey": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "minimum": 0,
+          "title": "Frame",
+          "type": "integer"
+        },
+        "viseme": {
+          "enum": [
+            "rest",
+            "MBP",
+            "FV",
+            "TH",
+            "AA",
+            "EE",
+            "OH",
+            "L"
+          ],
+          "title": "Viseme",
+          "type": "string"
+        },
+        "weight": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "frame",
+        "viseme"
+      ],
+      "title": "VisemeKey",
       "type": "object"
     },
     "TimingDelta": {

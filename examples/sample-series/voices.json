@@ -1,0 +1,16 @@
+[
+  {
+    "character_id": "char_nia",
+    "provider": "fixture",
+    "provider_voice_id": "sample-voice-a",
+    "consent": "Sample data. Not a real performer.",
+    "pronunciation": {}
+  },
+  {
+    "character_id": "char_cole",
+    "provider": "fixture",
+    "provider_voice_id": "sample-voice-b",
+    "consent": "Sample data. Not a real performer.",
+    "pronunciation": {}
+  }
+]

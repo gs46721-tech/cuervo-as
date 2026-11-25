@@ -14,6 +14,7 @@ t3's provider relay was not reachable from this environment (the tunnel returned
 | `asset_assist` | Gemini, Claude, Cursor | Image and model-sheet help |
 | `editor_assist` | Cursor, Claude, Gemini | Edits in the authoring UI |
 | `review` | Gemini, Claude, Cursor | A second pass, not the writer that drafted the line |
+| `voice_prep` | Claude, Gemini, Cursor | Emotion and pronunciation for a line. Synthesis stays on a voice adapter |
 
 The first available provider in the list runs the step. If it errors, the router tries the next. `register` adds a provider. Pass a new route table to send a step somewhere else. `only` forces one name.
 
