@@ -106,6 +106,46 @@ def solo_episode() -> Episode:
     )
 
 
+def _track(track_id: str, kind: str, end: int, pose: str, mask: list[str], priority: int) -> ActionTrack:
+    return ActionTrack(
+        track_id=track_id,
+        kind=kind,
+        target_actor_id="act_a",
+        start_frame=0,
+        end_frame=end,
+        interpolation="stepped",
+        mask=mask,
+        priority=priority,
+        blend_mode="override",
+        keyframes=[ActionKeyframe(frame=0, pose=pose)],
+    )
+
+
+def stage_episode() -> Episode:
+    """Two shots and four track kinds. Not a series."""
+
+    episode = solo_episode()
+    episode.scenes[0].target_runtime_frames = 72
+    main = episode.scenes[0].shots[0]
+    main.shot_id = "sh_main"
+    main.duration_frames = 48
+    main.action_tracks = [
+        _track("tr_body", "pose", 48, "sit", ["root", "torso"], 10),
+        _track("tr_gesture", "gesture", 24, "shrug", ["arm_r", "hand_r"], 20),
+        _track("tr_gaze", "gaze", 48, "idle", ["gaze_yaw", "head"], 30),
+        _track("tr_face", "expression", 48, "hold", ["mouth", "brow_l"], 40),
+    ]
+    main.camera.preset = "wide"
+    follower = main.model_copy(deep=True)
+    follower.shot_id = "sh_next"
+    follower.start_frame = 48
+    follower.duration_frames = 24
+    follower.action_tracks = [_track("tr_next_body", "pose", 24, "sit", ["root", "torso"], 10)]
+    follower.camera.preset = "two_shot"
+    episode.scenes[0].shots = [main, follower]
+    return Episode.model_validate(episode.model_dump())
+
+
 def hold_patch() -> TimingPatch:
     return TimingPatch(
         kind="timing_patch",

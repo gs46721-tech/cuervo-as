@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/gs46721-tech/cuervo-as/schemas/animation-ir-v0.schema.json",
   "title": "AnimationIRv0",
-  "description": "Phase 0 Animation IR. An episode document or a timing patch. Timeline fields are integer frames.",
+  "description": "An episode, a timing patch, or an edit patch. Timeline fields are integer frames.",
   "oneOf": [
     {
       "additionalProperties": false,
@@ -110,6 +110,76 @@
         "timing"
       ],
       "title": "TimingPatch",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "edit_patch",
+          "title": "Kind",
+          "type": "string"
+        },
+        "patch_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Patch Id",
+          "type": "string"
+        },
+        "target_shot_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Target Shot Id",
+          "type": "string"
+        },
+        "base_revision": {
+          "pattern": "^rev-[0-9]{4,}$",
+          "title": "Base Revision",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "timing": {
+          "items": {
+            "$ref": "#/$defs/TimingDelta"
+          },
+          "title": "Timing",
+          "type": "array"
+        },
+        "extend_shot_frames": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Extend Shot Frames",
+          "type": "integer"
+        },
+        "poses": {
+          "items": {
+            "$ref": "#/$defs/PoseEdit"
+          },
+          "title": "Poses",
+          "type": "array"
+        },
+        "camera": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraEdit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind",
+        "patch_id",
+        "target_shot_id",
+        "base_revision",
+        "reason"
+      ],
+      "title": "EditPatch",
       "type": "object"
     }
   ],
@@ -1045,6 +1115,78 @@
         "track_id"
       ],
       "title": "TimingDelta",
+      "type": "object"
+    },
+    "CameraEdit": {
+      "additionalProperties": false,
+      "properties": {
+        "preset": {
+          "anyOf": [
+            {
+              "enum": [
+                "wide",
+                "two_shot",
+                "over_the_shoulder",
+                "close_up",
+                "reaction",
+                "insert"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preset"
+        },
+        "x": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X"
+        },
+        "y": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y"
+        }
+      },
+      "title": "CameraEdit",
+      "type": "object"
+    },
+    "PoseEdit": {
+      "additionalProperties": false,
+      "properties": {
+        "track_id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Track Id",
+          "type": "string"
+        },
+        "pose": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Pose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "track_id",
+        "pose"
+      ],
+      "title": "PoseEdit",
       "type": "object"
     }
   }
