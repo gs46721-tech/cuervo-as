@@ -16,7 +16,7 @@ An episode pins a library of characters, rigs, backgrounds, and props by id and 
 - `dialogue_tracks` with speaker, line id, text, and optional voice-take pin
 - `locks` and `provenance`
 
-`alignment` and `visemes` exist on dialogue tracks and must be empty until a voice slice fills them. A voice take id and version are set together or not at all. The reference scene has neither.
+`alignment` and `visemes` start empty. The voice pass fills them and sets the take id and version together. Vendor voice ids stay on the voice profile, not in this document. The sample episode is stored before that pass, so those fields are empty there.
 
 ## Time and space
 

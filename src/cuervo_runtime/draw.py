@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw
 from cuervo_ir.models import Episode, Shot
 
 from cuervo_runtime.mixer import controls_at
+from cuervo_voice.visemes import VISEME_MOUTH, viseme_at
 
 WIDTH = 640
 HEIGHT = 360
@@ -30,6 +31,11 @@ def render_png(
         if not actor.visible:
             continue
         controls = controls_at(shot, actor.actor_id, frame, library)
+        viseme = viseme_at(shot, actor.actor_id, frame)
+        if viseme is not None:
+            name, weight = viseme
+            for controller, value in VISEME_MOUTH[name].items():
+                controls[controller] = value * weight
         _draw_actor(draw, actor, controls, _camera_pan(shot))
     buffer = BytesIO()
     image.save(buffer, format="PNG")

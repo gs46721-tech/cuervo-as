@@ -113,6 +113,29 @@ class ActionTrack(StrictModel):
         return self
 
 
+VisemeName = Literal["rest", "MBP", "FV", "TH", "AA", "EE", "OH", "L"]
+
+
+class AlignmentSpan(StrictModel):
+    start_sample: Annotated[int, Field(ge=0)]
+    end_sample: Annotated[int, Field(ge=1)]
+    text: Annotated[str, Field(min_length=1)]
+    phoneme: Annotated[str, Field(min_length=1)]
+    confidence: Annotated[float, Field(ge=0, le=1)]
+
+    @model_validator(mode="after")
+    def ordered(self) -> AlignmentSpan:
+        if self.end_sample <= self.start_sample:
+            raise ValueError("alignment span is empty")
+        return self
+
+
+class VisemeKey(StrictModel):
+    frame: Frame
+    viseme: VisemeName
+    weight: float = Field(default=1, ge=0, le=1)
+
+
 class DialogueTrack(StrictModel):
     track_id: Id
     speaker_actor_id: Id
@@ -122,9 +145,8 @@ class DialogueTrack(StrictModel):
     voice_take_version: Version | None = None
     start_frame: Frame
     end_frame: Frame
-    # Populated by the voice slice. Phase 0 stores the fields and keeps them empty.
-    alignment: Annotated[list[object], Field(max_length=0)] = Field(default_factory=list)
-    visemes: Annotated[list[object], Field(max_length=0)] = Field(default_factory=list)
+    alignment: list[AlignmentSpan] = Field(default_factory=list)
+    visemes: list[VisemeKey] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def interval_and_voice(self) -> DialogueTrack:
@@ -132,6 +154,9 @@ class DialogueTrack(StrictModel):
             raise ValueError(f"{self.track_id}: end_frame must be greater than start_frame")
         if (self.voice_take_id is None) != (self.voice_take_version is None):
             raise ValueError(f"{self.track_id}: voice take id and version are set together")
+        for key in self.visemes:
+            if key.frame < self.start_frame or key.frame >= self.end_frame:
+                raise ValueError(f"{self.track_id}: viseme frame {key.frame} is outside the line")
         return self
 
 

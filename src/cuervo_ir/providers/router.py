@@ -13,6 +13,7 @@ DEFAULT_ROUTES: dict[str, tuple[str, ...]] = {
     "asset_assist": ("gemini", "claude", "cursor"),
     "editor_assist": ("cursor", "claude", "gemini"),
     "review": ("gemini", "claude", "cursor"),
+    "voice_prep": ("claude", "gemini", "cursor"),
 }
 
 STEPS: tuple[str, ...] = tuple(DEFAULT_ROUTES)
