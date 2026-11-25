@@ -13,6 +13,7 @@ The technical blueprint is [`docs/ai-animation-studio-blueprint.pdf`](docs/ai-an
 | `docs/` | Blueprint, product style guide, rig contract, IR notes, provider routes |
 | `schemas/animation-ir-v0.schema.json` | JSON Schema generated from the models |
 | `src/cuervo_ir/` | IR models, timing patches, and the Claude / Cursor / Gemini router |
+| `src/cuervo_runtime/` | Headless flat 2D preview. Not a permanent runtime choice |
 | `examples/` | Sample episode and sample series notes |
 | `tests/` | Engine tests on a generic fixture, plus sample-episode tests |
 
@@ -24,6 +25,8 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
 python3 -m cuervo_ir examples/reference-scene.json
+python3 -m cuervo_runtime examples/reference-scene.json --shot sh_establish --frame 0 \
+  --poses examples/sample-series/poses.json -o /tmp/frame.png
 ```
 
 Provider keys stay in the environment. See [`docs/providers.md`](docs/providers.md).

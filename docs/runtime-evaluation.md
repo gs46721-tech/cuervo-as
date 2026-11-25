@@ -1,6 +1,6 @@
 # Runtime evaluation
 
-Phase 0 does not integrate a 2D runtime. The blueprint asks for a benchmark before any lock-in. This note is the comparison to run, not a result.
+The blueprint says to benchmark at least two runtimes before locking in, and not to pick one yet. `cuervo_runtime` is the first headless adapter: flat shapes, integer frames, same bytes for the same episode. It is the preview called for in week 2. Rive, Spine, and PixiJS are still unscored.
 
 Candidates named by the blueprint: Rive, Spine, and a custom PixiJS/WebGL adapter.
 
