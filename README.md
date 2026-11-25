@@ -17,6 +17,7 @@ The technical blueprint is [`docs/ai-animation-studio-blueprint.pdf`](docs/ai-an
 | `src/cuervo_voice/` | Voice profiles, alignment, visemes. Vendor ids stay outside the IR |
 | `src/cuervo_edit/` | Typed natural-language shot edits through the model router |
 | `editor/` | React series editor: script, storyboard, preview, timeline |
+| `src/cuervo_pipeline/` | Shot jobs, cache, approvals, and FFmpeg assembly |
 | `examples/` | Sample episode and sample series notes |
 | `tests/` | Engine tests on a generic fixture, plus sample-episode tests |
 
