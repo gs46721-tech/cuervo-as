@@ -12,6 +12,7 @@ export function App() {
   const [instruction, setInstruction] = useState("")
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [message, setMessage] = useState("Open an episode JSON file. The editor does not ship a show.")
+  const [poses, setPoses] = useState<unknown | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
 
   const shot = episode?.shots.find((item) => item.shot_id === shotId) ?? null
@@ -50,7 +51,7 @@ export function App() {
     }
     try {
       const episodeJson = JSON.parse(await file.text()) as unknown
-      const opened = await openSession(episodeJson, null)
+      const opened = await openSession(episodeJson, poses)
       setSessionId(opened.session_id)
       applyState(opened, false)
       setFrame(0)
@@ -96,6 +97,24 @@ export function App() {
     <div className="app">
       <header>
         <strong>Cuervo</strong>
+        <label>
+          Pose table
+          <input
+            aria-label="Pose table"
+            type="file"
+            accept="application/json"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (!file) {
+                return
+              }
+              void file.text().then((text) => {
+                setPoses(JSON.parse(text) as unknown)
+                setMessage("Pose table loaded. Open the episode again to use it.")
+              })
+            }}
+          />
+        </label>
         <label>
           Episode
           <input

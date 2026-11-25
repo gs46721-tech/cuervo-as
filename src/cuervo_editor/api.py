@@ -68,7 +68,7 @@ def create_app(router: ProviderRouter | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(422, str(exc)) from exc
         session_id, session = app.state.store.open(episode, body.poses)
-        return {"session_id": session_id, "episode": summarize(session.episode), "snapshots": 0}
+        return {"session_id": session_id, **_state(session)}
 
     @app.get("/api/sessions/{session_id}")
     def read_session(session_id: str):

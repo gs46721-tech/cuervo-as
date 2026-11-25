@@ -64,6 +64,23 @@ def test_two_unrelated_episodes_edit_and_undo():
     assert second.json()["episode"]["shots"][0]["shot_id"] == "sh_a"
 
 
+def test_series_pose_table_is_required_to_preview_an_extension():
+    client = _client()
+    episode = solo_episode()
+    episode.assets.characters[0].extension_poses = ["deadpan"]
+    episode.scenes[0].shots[0].action_tracks[0].keyframes[0].pose = "deadpan"
+    payload = episode.model_dump(mode="json")
+    missing = client.post("/api/sessions", json={"episode": payload})
+    session_id = missing.json()["session_id"]
+    assert client.get(f"/api/sessions/{session_id}/frames/sh_a/0.png").status_code == 422
+    opened = client.post("/api/sessions", json={"episode": payload, "poses": {"deadpan": {"mouth": 0.2}}})
+    assert opened.json()["can_redo"] is False
+    assert opened.json()["pending"] is False
+    framed = client.get(f"/api/sessions/{opened.json()['session_id']}/frames/sh_a/0.png")
+    assert framed.status_code == 200
+    assert framed.content.startswith(b"\x89PNG")
+
+
 def test_lock_blocks_the_next_pose_proposal():
     client = _client()
     opened = client.post("/api/sessions", json={"episode": stage_episode().model_dump(mode="json")})
