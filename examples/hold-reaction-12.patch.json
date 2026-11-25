@@ -1,0 +1,15 @@
+{
+  "kind": "timing_patch",
+  "patch_id": "patch_hold_reaction_12",
+  "target_shot_id": "sh_reaction",
+  "base_revision": "rev-0001",
+  "reason": "Hold the reaction 12 more frames.",
+  "timing": [
+    {
+      "track_id": "tr_nia_react",
+      "start_delta_frames": 0,
+      "end_delta_frames": 12
+    }
+  ],
+  "extend_shot_frames": 12
+}

@@ -1,0 +1,989 @@
+{
+  "kind": "episode",
+  "episode_id": "ep_five_minutes",
+  "version": "0.1.0",
+  "title": "Five Minutes",
+  "fps": 24,
+  "assets": {
+    "characters": [
+      {
+        "asset_id": "char_nia",
+        "version": "1.0.0",
+        "display_name": "Nia Adeyemi",
+        "rig_id": "rig_nia",
+        "rig_version": "1.0.0",
+        "extension_poses": [
+          "deadpan"
+        ],
+        "extension_controllers": []
+      },
+      {
+        "asset_id": "char_cole",
+        "version": "1.0.0",
+        "display_name": "Cole Park",
+        "rig_id": "rig_cole",
+        "rig_version": "1.0.0",
+        "extension_poses": [
+          "fidget"
+        ],
+        "extension_controllers": []
+      }
+    ],
+    "rigs": [
+      {
+        "asset_id": "rig_nia",
+        "version": "1.0.0",
+        "character_id": "char_nia",
+        "contract": "cuervo.rig.v0"
+      },
+      {
+        "asset_id": "rig_cole",
+        "version": "1.0.0",
+        "character_id": "char_cole",
+        "contract": "cuervo.rig.v0"
+      }
+    ],
+    "backgrounds": [
+      {
+        "asset_id": "bg_living_room",
+        "version": "1.0.0",
+        "display_name": "Nia's living room",
+        "location_id": "loc_living_room"
+      }
+    ],
+    "props": [
+      {
+        "asset_id": "prop_couch",
+        "version": "1.0.0",
+        "display_name": "Couch"
+      },
+      {
+        "asset_id": "prop_coffee_table",
+        "version": "1.0.0",
+        "display_name": "Coffee table"
+      },
+      {
+        "asset_id": "prop_television",
+        "version": "1.0.0",
+        "display_name": "Television"
+      },
+      {
+        "asset_id": "prop_remote",
+        "version": "1.0.0",
+        "display_name": "Remote"
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "scene_id": "sc_five_minutes",
+      "episode_id": "ep_five_minutes",
+      "title": "Five Minutes",
+      "objective": "Nia and Cole sit down to watch something and never turn the television on.",
+      "setting_id": "bg_living_room",
+      "emotional_trajectory": "mild annoyance settling into a shared deadpan truce",
+      "continuity": [
+        "Evening. Both lamps are on. The television stays off.",
+        "Nia sits on the left cushion. Cole sits on the right cushion.",
+        "The remote stays under Nia's cushion.",
+        "Neither character stands or leaves the couch."
+      ],
+      "target_runtime_frames": 768,
+      "shots": [
+        {
+          "shot_id": "sh_establish",
+          "scene_id": "sc_five_minutes",
+          "fps": 24,
+          "start_frame": 0,
+          "duration_frames": 96,
+          "asset_refs": [
+            {
+              "role": "character",
+              "asset_id": "char_nia",
+              "version": "1.0.0"
+            },
+            {
+              "role": "character",
+              "asset_id": "char_cole",
+              "version": "1.0.0"
+            },
+            {
+              "role": "rig",
+              "asset_id": "rig_nia",
+              "version": "1.0.0"
+            },
+            {
+              "role": "rig",
+              "asset_id": "rig_cole",
+              "version": "1.0.0"
+            },
+            {
+              "role": "background",
+              "asset_id": "bg_living_room",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_couch",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_coffee_table",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_television",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_remote",
+              "version": "1.0.0"
+            }
+          ],
+          "camera": {
+            "preset": "wide",
+            "framing": "Both characters on the couch, television off, full living room",
+            "transform": {
+              "space": "camera",
+              "unit": "px",
+              "x": 0.0,
+              "y": 80.0,
+              "rotation_deg": 0.0,
+              "scale": 1.0
+            },
+            "keyframes": [],
+            "constraints": [
+              "show the full couch, both lamps, and the television"
+            ]
+          },
+          "actors": [
+            {
+              "actor_id": "act_nia",
+              "character_id": "char_nia",
+              "rig_id": "rig_nia",
+              "rig_instance_id": "riginst_nia",
+              "stage": {
+                "space": "stage",
+                "unit": "px",
+                "x": -180.0,
+                "y": 40.0,
+                "rotation_deg": 0.0,
+                "scale": 1.0
+              },
+              "facing": "three_quarter_right",
+              "depth": 2,
+              "visible": true
+            },
+            {
+              "actor_id": "act_cole",
+              "character_id": "char_cole",
+              "rig_id": "rig_cole",
+              "rig_instance_id": "riginst_cole",
+              "stage": {
+                "space": "stage",
+                "unit": "px",
+                "x": 180.0,
+                "y": 40.0,
+                "rotation_deg": 0.0,
+                "scale": 1.0
+              },
+              "facing": "three_quarter_left",
+              "depth": 2,
+              "visible": true
+            }
+          ],
+          "action_tracks": [
+            {
+              "track_id": "tr_est_nia_sit",
+              "kind": "pose",
+              "target_actor_id": "act_nia",
+              "start_frame": 0,
+              "end_frame": 96,
+              "interpolation": "stepped",
+              "mask": [
+                "root",
+                "torso",
+                "leg_l",
+                "leg_r"
+              ],
+              "priority": 10,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 0,
+                  "pose": "sit",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_est_cole_sit",
+              "kind": "pose",
+              "target_actor_id": "act_cole",
+              "start_frame": 0,
+              "end_frame": 96,
+              "interpolation": "stepped",
+              "mask": [
+                "root",
+                "torso",
+                "leg_l",
+                "leg_r"
+              ],
+              "priority": 10,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 0,
+                  "pose": "sit",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_est_nia_blink",
+              "kind": "secondary",
+              "target_actor_id": "act_nia",
+              "start_frame": 36,
+              "end_frame": 48,
+              "interpolation": "stepped",
+              "mask": [
+                "blink"
+              ],
+              "priority": 50,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 36,
+                  "pose": "blink",
+                  "weight": 1.0
+                }
+              ]
+            }
+          ],
+          "dialogue_tracks": [],
+          "locks": [],
+          "provenance": {
+            "revision": "rev-0001",
+            "parent_revision": null,
+            "source": "authored",
+            "note": "Phase 0 reference scene, authored against the rig contract."
+          }
+        },
+        {
+          "shot_id": "sh_two_shot",
+          "scene_id": "sc_five_minutes",
+          "fps": 24,
+          "start_frame": 96,
+          "duration_frames": 312,
+          "asset_refs": [
+            {
+              "role": "character",
+              "asset_id": "char_nia",
+              "version": "1.0.0"
+            },
+            {
+              "role": "character",
+              "asset_id": "char_cole",
+              "version": "1.0.0"
+            },
+            {
+              "role": "rig",
+              "asset_id": "rig_nia",
+              "version": "1.0.0"
+            },
+            {
+              "role": "rig",
+              "asset_id": "rig_cole",
+              "version": "1.0.0"
+            },
+            {
+              "role": "background",
+              "asset_id": "bg_living_room",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_couch",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_coffee_table",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_television",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_remote",
+              "version": "1.0.0"
+            }
+          ],
+          "camera": {
+            "preset": "two_shot",
+            "framing": "Nia and Cole, waist up, couch",
+            "transform": {
+              "space": "camera",
+              "unit": "px",
+              "x": 0.0,
+              "y": 140.0,
+              "rotation_deg": 0.0,
+              "scale": 1.4
+            },
+            "keyframes": [],
+            "constraints": [
+              "hold both characters at waist-up"
+            ]
+          },
+          "actors": [
+            {
+              "actor_id": "act_nia",
+              "character_id": "char_nia",
+              "rig_id": "rig_nia",
+              "rig_instance_id": "riginst_nia",
+              "stage": {
+                "space": "stage",
+                "unit": "px",
+                "x": -180.0,
+                "y": 40.0,
+                "rotation_deg": 0.0,
+                "scale": 1.0
+              },
+              "facing": "three_quarter_right",
+              "depth": 2,
+              "visible": true
+            },
+            {
+              "actor_id": "act_cole",
+              "character_id": "char_cole",
+              "rig_id": "rig_cole",
+              "rig_instance_id": "riginst_cole",
+              "stage": {
+                "space": "stage",
+                "unit": "px",
+                "x": 180.0,
+                "y": 40.0,
+                "rotation_deg": 0.0,
+                "scale": 1.0
+              },
+              "facing": "three_quarter_left",
+              "depth": 2,
+              "visible": true
+            }
+          ],
+          "action_tracks": [
+            {
+              "track_id": "tr_two_nia_sit",
+              "kind": "pose",
+              "target_actor_id": "act_nia",
+              "start_frame": 0,
+              "end_frame": 312,
+              "interpolation": "stepped",
+              "mask": [
+                "root",
+                "torso",
+                "leg_l",
+                "leg_r"
+              ],
+              "priority": 10,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 0,
+                  "pose": "sit",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_two_cole_sit",
+              "kind": "pose",
+              "target_actor_id": "act_cole",
+              "start_frame": 0,
+              "end_frame": 312,
+              "interpolation": "stepped",
+              "mask": [
+                "root",
+                "torso",
+                "leg_l",
+                "leg_r"
+              ],
+              "priority": 10,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 0,
+                  "pose": "sit",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_two_cole_shrug",
+              "kind": "gesture",
+              "target_actor_id": "act_cole",
+              "start_frame": 24,
+              "end_frame": 84,
+              "interpolation": "ease_in_out",
+              "mask": [
+                "arm_l",
+                "arm_r",
+                "hand_l",
+                "hand_r"
+              ],
+              "priority": 20,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 24,
+                  "pose": "shrug",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_two_nia_deadpan",
+              "kind": "expression",
+              "target_actor_id": "act_nia",
+              "start_frame": 108,
+              "end_frame": 240,
+              "interpolation": "stepped",
+              "mask": [
+                "brow_l",
+                "brow_r",
+                "eye_l",
+                "eye_r",
+                "mouth"
+              ],
+              "priority": 40,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 108,
+                  "pose": "deadpan",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_two_cole_point",
+              "kind": "gesture",
+              "target_actor_id": "act_cole",
+              "start_frame": 252,
+              "end_frame": 300,
+              "interpolation": "ease_in_out",
+              "mask": [
+                "arm_l",
+                "arm_r",
+                "hand_l",
+                "hand_r"
+              ],
+              "priority": 20,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 252,
+                  "pose": "point",
+                  "weight": 1.0
+                }
+              ]
+            }
+          ],
+          "dialogue_tracks": [
+            {
+              "track_id": "tr_ln_five",
+              "speaker_actor_id": "act_cole",
+              "line_id": "ln_five",
+              "text": "You said five minutes.",
+              "voice_take_id": null,
+              "voice_take_version": null,
+              "start_frame": 24,
+              "end_frame": 84,
+              "alignment": [],
+              "visemes": []
+            },
+            {
+              "track_id": "tr_ln_quiet",
+              "speaker_actor_id": "act_nia",
+              "line_id": "ln_quiet",
+              "text": "I said five minutes of quiet. You used four of them finding the remote.",
+              "voice_take_id": null,
+              "voice_take_version": null,
+              "start_frame": 108,
+              "end_frame": 240,
+              "alignment": [],
+              "visemes": []
+            },
+            {
+              "track_id": "tr_ln_remote",
+              "speaker_actor_id": "act_cole",
+              "line_id": "ln_remote",
+              "text": "It's under you.",
+              "voice_take_id": null,
+              "voice_take_version": null,
+              "start_frame": 252,
+              "end_frame": 300,
+              "alignment": [],
+              "visemes": []
+            }
+          ],
+          "locks": [],
+          "provenance": {
+            "revision": "rev-0001",
+            "parent_revision": null,
+            "source": "authored",
+            "note": "Phase 0 reference scene, authored against the rig contract."
+          }
+        },
+        {
+          "shot_id": "sh_reaction",
+          "scene_id": "sc_five_minutes",
+          "fps": 24,
+          "start_frame": 408,
+          "duration_frames": 144,
+          "asset_refs": [
+            {
+              "role": "character",
+              "asset_id": "char_nia",
+              "version": "1.0.0"
+            },
+            {
+              "role": "character",
+              "asset_id": "char_cole",
+              "version": "1.0.0"
+            },
+            {
+              "role": "rig",
+              "asset_id": "rig_nia",
+              "version": "1.0.0"
+            },
+            {
+              "role": "rig",
+              "asset_id": "rig_cole",
+              "version": "1.0.0"
+            },
+            {
+              "role": "background",
+              "asset_id": "bg_living_room",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_couch",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_coffee_table",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_television",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_remote",
+              "version": "1.0.0"
+            }
+          ],
+          "camera": {
+            "preset": "close_up",
+            "framing": "Nia, head and shoulders, holding the reaction",
+            "transform": {
+              "space": "camera",
+              "unit": "px",
+              "x": -180.0,
+              "y": 180.0,
+              "rotation_deg": 0.0,
+              "scale": 2.2
+            },
+            "keyframes": [],
+            "constraints": [
+              "Nia stays on the left-cushion eyeline"
+            ]
+          },
+          "actors": [
+            {
+              "actor_id": "act_nia",
+              "character_id": "char_nia",
+              "rig_id": "rig_nia",
+              "rig_instance_id": "riginst_nia",
+              "stage": {
+                "space": "stage",
+                "unit": "px",
+                "x": -180.0,
+                "y": 40.0,
+                "rotation_deg": 0.0,
+                "scale": 1.0
+              },
+              "facing": "three_quarter_right",
+              "depth": 2,
+              "visible": true
+            },
+            {
+              "actor_id": "act_cole",
+              "character_id": "char_cole",
+              "rig_id": "rig_cole",
+              "rig_instance_id": "riginst_cole",
+              "stage": {
+                "space": "stage",
+                "unit": "px",
+                "x": 180.0,
+                "y": 40.0,
+                "rotation_deg": 0.0,
+                "scale": 1.0
+              },
+              "facing": "three_quarter_left",
+              "depth": 2,
+              "visible": true
+            }
+          ],
+          "action_tracks": [
+            {
+              "track_id": "tr_react_nia_sit",
+              "kind": "pose",
+              "target_actor_id": "act_nia",
+              "start_frame": 0,
+              "end_frame": 144,
+              "interpolation": "stepped",
+              "mask": [
+                "root",
+                "torso",
+                "leg_l",
+                "leg_r"
+              ],
+              "priority": 10,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 0,
+                  "pose": "sit",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_react_cole_sit",
+              "kind": "pose",
+              "target_actor_id": "act_cole",
+              "start_frame": 0,
+              "end_frame": 144,
+              "interpolation": "stepped",
+              "mask": [
+                "root",
+                "torso",
+                "leg_l",
+                "leg_r"
+              ],
+              "priority": 10,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 0,
+                  "pose": "sit",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_nia_react",
+              "kind": "expression",
+              "target_actor_id": "act_nia",
+              "start_frame": 72,
+              "end_frame": 144,
+              "interpolation": "stepped",
+              "mask": [
+                "brow_l",
+                "brow_r",
+                "eye_l",
+                "eye_r",
+                "mouth"
+              ],
+              "priority": 40,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 72,
+                  "pose": "react",
+                  "weight": 1.0
+                }
+              ]
+            }
+          ],
+          "dialogue_tracks": [
+            {
+              "track_id": "tr_ln_nothing",
+              "speaker_actor_id": "act_nia",
+              "line_id": "ln_nothing",
+              "text": "Then we watch nothing.",
+              "voice_take_id": null,
+              "voice_take_version": null,
+              "start_frame": 0,
+              "end_frame": 72,
+              "alignment": [],
+              "visemes": []
+            }
+          ],
+          "locks": [],
+          "provenance": {
+            "revision": "rev-0001",
+            "parent_revision": null,
+            "source": "authored",
+            "note": "Phase 0 reference scene, authored against the rig contract."
+          }
+        },
+        {
+          "shot_id": "sh_button",
+          "scene_id": "sc_five_minutes",
+          "fps": 24,
+          "start_frame": 552,
+          "duration_frames": 216,
+          "asset_refs": [
+            {
+              "role": "character",
+              "asset_id": "char_nia",
+              "version": "1.0.0"
+            },
+            {
+              "role": "character",
+              "asset_id": "char_cole",
+              "version": "1.0.0"
+            },
+            {
+              "role": "rig",
+              "asset_id": "rig_nia",
+              "version": "1.0.0"
+            },
+            {
+              "role": "rig",
+              "asset_id": "rig_cole",
+              "version": "1.0.0"
+            },
+            {
+              "role": "background",
+              "asset_id": "bg_living_room",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_couch",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_coffee_table",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_television",
+              "version": "1.0.0"
+            },
+            {
+              "role": "prop",
+              "asset_id": "prop_remote",
+              "version": "1.0.0"
+            }
+          ],
+          "camera": {
+            "preset": "two_shot",
+            "framing": "Both look at the dark television",
+            "transform": {
+              "space": "camera",
+              "unit": "px",
+              "x": 0.0,
+              "y": 140.0,
+              "rotation_deg": 0.0,
+              "scale": 1.4
+            },
+            "keyframes": [],
+            "constraints": [
+              "eyelines meet the television, which stays off"
+            ]
+          },
+          "actors": [
+            {
+              "actor_id": "act_nia",
+              "character_id": "char_nia",
+              "rig_id": "rig_nia",
+              "rig_instance_id": "riginst_nia",
+              "stage": {
+                "space": "stage",
+                "unit": "px",
+                "x": -180.0,
+                "y": 40.0,
+                "rotation_deg": 0.0,
+                "scale": 1.0
+              },
+              "facing": "three_quarter_right",
+              "depth": 2,
+              "visible": true
+            },
+            {
+              "actor_id": "act_cole",
+              "character_id": "char_cole",
+              "rig_id": "rig_cole",
+              "rig_instance_id": "riginst_cole",
+              "stage": {
+                "space": "stage",
+                "unit": "px",
+                "x": 180.0,
+                "y": 40.0,
+                "rotation_deg": 0.0,
+                "scale": 1.0
+              },
+              "facing": "three_quarter_left",
+              "depth": 2,
+              "visible": true
+            }
+          ],
+          "action_tracks": [
+            {
+              "track_id": "tr_btn_nia_sit",
+              "kind": "pose",
+              "target_actor_id": "act_nia",
+              "start_frame": 0,
+              "end_frame": 216,
+              "interpolation": "stepped",
+              "mask": [
+                "root",
+                "torso",
+                "leg_l",
+                "leg_r"
+              ],
+              "priority": 10,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 0,
+                  "pose": "sit",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_btn_cole_sit",
+              "kind": "pose",
+              "target_actor_id": "act_cole",
+              "start_frame": 0,
+              "end_frame": 216,
+              "interpolation": "stepped",
+              "mask": [
+                "root",
+                "torso",
+                "leg_l",
+                "leg_r"
+              ],
+              "priority": 10,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 0,
+                  "pose": "sit",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_btn_nia_look",
+              "kind": "gaze",
+              "target_actor_id": "act_nia",
+              "start_frame": 120,
+              "end_frame": 216,
+              "interpolation": "ease_in_out",
+              "mask": [
+                "gaze_yaw",
+                "gaze_pitch",
+                "head"
+              ],
+              "priority": 30,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 120,
+                  "pose": "look_at",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_btn_cole_look",
+              "kind": "gaze",
+              "target_actor_id": "act_cole",
+              "start_frame": 120,
+              "end_frame": 216,
+              "interpolation": "ease_in_out",
+              "mask": [
+                "gaze_yaw",
+                "gaze_pitch",
+                "head"
+              ],
+              "priority": 30,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 120,
+                  "pose": "look_at",
+                  "weight": 1.0
+                }
+              ]
+            },
+            {
+              "track_id": "tr_btn_nia_hold",
+              "kind": "expression",
+              "target_actor_id": "act_nia",
+              "start_frame": 120,
+              "end_frame": 216,
+              "interpolation": "stepped",
+              "mask": [
+                "brow_l",
+                "brow_r",
+                "eye_l",
+                "eye_r",
+                "mouth"
+              ],
+              "priority": 40,
+              "blend_mode": "override",
+              "keyframes": [
+                {
+                  "frame": 120,
+                  "pose": "hold",
+                  "weight": 1.0
+                }
+              ]
+            }
+          ],
+          "dialogue_tracks": [
+            {
+              "track_id": "tr_ln_plan",
+              "speaker_actor_id": "act_cole",
+              "line_id": "ln_plan",
+              "text": "That's the plan I had before I sat down.",
+              "voice_take_id": null,
+              "voice_take_version": null,
+              "start_frame": 12,
+              "end_frame": 108,
+              "alignment": [],
+              "visemes": []
+            }
+          ],
+          "locks": [],
+          "provenance": {
+            "revision": "rev-0001",
+            "parent_revision": null,
+            "source": "authored",
+            "note": "Phase 0 reference scene, authored against the rig contract."
+          }
+        }
+      ]
+    }
+  ]
+}
