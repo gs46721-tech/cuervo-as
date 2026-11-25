@@ -15,6 +15,7 @@ The technical blueprint is [`docs/ai-animation-studio-blueprint.pdf`](docs/ai-an
 | `src/cuervo_ir/` | IR models, timing patches, and the Claude / Cursor / Gemini router |
 | `src/cuervo_runtime/` | Headless flat 2D preview. Not a permanent runtime choice |
 | `src/cuervo_voice/` | Voice profiles, alignment, visemes. Vendor ids stay outside the IR |
+| `src/cuervo_edit/` | Typed natural-language shot edits through the model router |
 | `examples/` | Sample episode and sample series notes |
 | `tests/` | Engine tests on a generic fixture, plus sample-episode tests |
 
