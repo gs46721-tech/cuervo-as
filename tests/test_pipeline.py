@@ -5,7 +5,7 @@ from cuervo_ir.models import DialogueTrack, Episode
 from cuervo_ir.providers.router import ModelRequest, ModelResponse, ProviderRouter
 from cuervo_voice.dub import VoiceProfile
 from cuervo_pipeline.plan import plan_script
-from cuervo_pipeline.run import adopt_asset, fingerprint, run_episode
+from cuervo_pipeline.run import PipelineError, adopt_asset, fingerprint, run_episode
 from tests.fixtures import solo_episode
 
 
@@ -113,6 +113,10 @@ def test_cache_approval_and_asset_opt_in(tmp_path: Path):
     opted = adopt_asset(episode, "char_a", "1.1.0")
     assert opted.scenes[0].shots[0].asset_refs[0].version == "1.1.0"
     assert fingerprint(opted.scenes[0].shots[0], None, {}) != before
+    cached_mp4 = Path(first.cache[by_id["sh_a"].cache_key]["mp4"])
+    cached_mp4.unlink()
+    rerun = run_episode(episode, tmp_path / "three", router=router, approved={"sh_a"}, cache=first.cache)
+    assert {report.shot_id: report.status for report in rerun.reports}["sh_a"] == "rendered"
 
 
 def test_dialogue_dubs_through_voice_prep_and_render_retries(tmp_path: Path):
@@ -160,4 +164,23 @@ def test_dialogue_dubs_through_voice_prep_and_render_retries(tmp_path: Path):
     report = result.reports[0]
     assert report.status == "rendered"
     assert report.attempts == 2
+    assert result.master is not None
+
+
+def test_one_shot_encode_failure_keeps_the_other(tmp_path: Path, monkeypatch):
+    episode = _brief()
+    router, _provider = _router()
+
+    def encode(directory: Path, pngs: list[bytes], fps: int):
+        if directory.name == "sh_a":
+            raise PipelineError("encode failed")
+        return original(directory, pngs, fps)
+
+    original = __import__("cuervo_pipeline.run", fromlist=["_encode_shot"])._encode_shot
+    monkeypatch.setattr("cuervo_pipeline.run._encode_shot", encode)
+    result = run_episode(episode, tmp_path / "encode", router=router, approved={"sh_a", "sh_b"})
+    by_id = {report.shot_id: report for report in result.reports}
+    assert by_id["sh_a"].status == "failed"
+    assert by_id["sh_a"].error == "encode failed"
+    assert by_id["sh_b"].status == "rendered"
     assert result.master is not None

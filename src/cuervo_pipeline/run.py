@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -42,11 +42,6 @@ class PipelineResult:
     reports: list[ShotReport]
     master: Path | None
     cache: dict[str, dict]
-
-
-@dataclass
-class _Cache:
-    entries: dict[str, dict] = field(default_factory=dict)
 
 
 def fingerprint(shot: Shot, poses: dict | None, generations: dict[str, str]) -> str:
@@ -118,7 +113,8 @@ def run_episode(
                 )
                 continue
             cached = store.get(key)
-            if cached is not None:
+            cached_path = Path(cached["mp4"]) if cached is not None else None
+            if cached is not None and cached_path is not None and cached_path.is_file():
                 reports.append(
                     ShotReport(
                         shot_id=shot.shot_id,
@@ -130,7 +126,7 @@ def run_episode(
                         review_note=cached["review_note"],
                     )
                 )
-                segments.append(Path(cached["mp4"]))
+                segments.append(cached_path)
                 continue
             note = _review(router, shot)
             pngs, attempts, error = _render_with_retry(
@@ -151,7 +147,22 @@ def run_episode(
                 )
                 continue
             digest = hashlib.sha256(b"".join(pngs)).hexdigest()
-            mp4 = _encode_shot(out_dir / _safe(shot.shot_id), pngs, episode.fps)
+            try:
+                mp4 = _encode_shot(out_dir / _safe(shot.shot_id), pngs, episode.fps)
+            except PipelineError as exc:
+                reports.append(
+                    ShotReport(
+                        shot_id=shot.shot_id,
+                        status="failed",
+                        cache_key=key,
+                        attempts=attempts,
+                        cost_frames=0,
+                        render_hash=None,
+                        review_note=note,
+                        error=str(exc),
+                    )
+                )
+                continue
             store[key] = {"hash": digest, "mp4": str(mp4), "review_note": note}
             reports.append(
                 ShotReport(
