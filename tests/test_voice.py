@@ -1,10 +1,10 @@
 import json
 
-from cuervo_ir.models import DialogueTrack
+from cuervo_ir.models import DialogueTrack, Episode, Lock
 from cuervo_ir.providers.router import ModelRequest, ModelResponse, ProviderRouter
 from cuervo_runtime.draw import render_png
 from cuervo_voice.dub import DubError, VoiceProfile, dub_episode
-from cuervo_voice.synth import ElevenLabsSynth
+from cuervo_voice.synth import ElevenLabsSynth, fit_pcm
 from tests.fixtures import solo_episode
 
 
@@ -90,6 +90,25 @@ def test_missing_consent_and_missing_profile_fail():
         assert "char_a" in str(exc)
     else:
         raise AssertionError("missing profile was dubbed")
+
+
+def test_locked_dialogue_is_not_replaced():
+    episode = _line_episode()
+    episode.scenes[0].shots[0].locks.append(
+        Lock(lock_id="lock_line", target_track_id="tr_line", properties=["dialogue"])
+    )
+    episode = Episode.model_validate(episode.model_dump())
+    try:
+        dub_episode(episode, [_profile()])
+    except DubError as exc:
+        assert "locked" in str(exc)
+    else:
+        raise AssertionError("locked dialogue was dubbed")
+
+
+def test_pcm_is_forced_to_the_line_length():
+    assert fit_pcm(b"\x01\x02", 2) == b"\x01\x02\x00\x00"
+    assert fit_pcm(b"\x01\x02\x03\x04\x05\x06", 2) == b"\x01\x02\x03\x04"
 
 
 def test_elevenlabs_adapter_uses_the_profile_voice_id():

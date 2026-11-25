@@ -17,7 +17,7 @@ from cuervo_ir.models import DialogueTrack, Episode
 from cuervo_ir.providers.router import ModelRequest, ProviderRouter, ProviderUnavailable
 from cuervo_voice.align import align_line
 from cuervo_voice.synth import FixtureSynth, VoiceError, VoiceSynth
-from cuervo_voice.visemes import viseme_keys
+from cuervo_voice.visemes import VISEMES, viseme_keys
 
 SAMPLE_RATE = 48_000
 
@@ -71,8 +71,15 @@ def dub_episode(
         fps = episode.fps
         for shot in scene["shots"]:
             actors = {actor["actor_id"]: actor for actor in shot["actors"]}
+            locked = {
+                lock["target_track_id"]
+                for lock in shot["locks"]
+                if "dialogue" in lock["properties"]
+            }
             changed = False
             for track in shot["dialogue_tracks"]:
+                if track["track_id"] in locked:
+                    raise DubError(f"{track['track_id']} dialogue is locked")
                 actor = actors[track["speaker_actor_id"]]
                 profile = by_character.get(actor["character_id"])
                 if profile is None:
@@ -142,7 +149,11 @@ def _prepare(text: str, router: ProviderRouter | None) -> tuple[str, dict[str, s
         payload = json.loads(response.text)
         emotion = str(payload.get("emotion") or "neutral")
         raw = payload.get("pronunciations") or {}
-        pronunciations = {str(word).lower(): str(phoneme) for word, phoneme in raw.items()}
+        pronunciations = {
+            str(word).lower(): str(phoneme)
+            for word, phoneme in raw.items()
+            if str(phoneme) in VISEMES
+        }
     except (json.JSONDecodeError, AttributeError, TypeError):
         return "neutral", {}, "fallback"
     return emotion, pronunciations, "router"

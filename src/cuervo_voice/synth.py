@@ -8,6 +8,7 @@ import math
 import os
 import struct
 from typing import Protocol
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -52,18 +53,34 @@ class ElevenLabsSynth:
             return self.transport(text, voice_id, sample_rate, sample_count)
         if not self.api_key:
             raise VoiceError("elevenlabs is not configured")
-        url = f"{self.base_url}/v1/text-to-speech/{voice_id}?output_format=pcm_16000"
+        if sample_rate not in (16_000, 22_050, 24_000, 44_100, 48_000):
+            raise VoiceError(f"elevenlabs has no pcm format for {sample_rate} Hz")
+        url = f"{self.base_url}/v1/text-to-speech/{voice_id}?output_format=pcm_{sample_rate}"
         request = Request(
             url,
             data=json.dumps({"text": text, "model_id": "eleven_multilingual_v2"}).encode("utf-8"),
             headers={"xi-api-key": self.api_key, "content-type": "application/json", "accept": "audio/pcm"},
             method="POST",
         )
-        with urlopen(request, timeout=60) as response:
-            pcm = response.read()
+        try:
+            with urlopen(request, timeout=60) as response:
+                pcm = response.read()
+        except (HTTPError, URLError) as exc:
+            raise VoiceError(str(getattr(exc, "reason", exc))) from exc
         if not pcm:
             raise VoiceError("elevenlabs returned no audio")
-        return _wav(16_000, pcm)
+        return _wav(sample_rate, fit_pcm(pcm, sample_count))
+
+
+def fit_pcm(pcm: bytes, sample_count: int) -> bytes:
+    """Force 16-bit mono PCM to the line length the alignment clock uses."""
+
+    if len(pcm) % 2:
+        pcm += b"\x00"
+    need = sample_count * 2
+    if len(pcm) < need:
+        return pcm + b"\x00" * (need - len(pcm))
+    return pcm[:need]
 
 
 def _wav(sample_rate: int, pcm: bytes) -> bytes:
