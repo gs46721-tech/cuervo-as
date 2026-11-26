@@ -4,6 +4,7 @@ import {
   type LockProperty,
   type SessionState,
   type Shot,
+  audioUrl,
   changeFrameUrl,
   exportUrl,
   frameUrl,
@@ -75,12 +76,52 @@ export function Stage(props: Props) {
   const live = useRef({ current, duration, shot, episode, previewing, urlFor })
   live.current = { current, duration, shot, episode, previewing, urlFor }
   const { onSeek, onPlaying } = props
+
+  // Voice takes for this shot. While they play, the sound is the clock, so the mouth stays on the words.
+  const sound = useRef<HTMLAudioElement | null>(null)
+  const soundUrl = state.has_takes && shot.has_voice && !previewing ? audioUrl(state, shot.shot_id) : null
+  useEffect(() => {
+    if (!soundUrl) {
+      sound.current = null
+      return
+    }
+    const element = new Audio(soundUrl)
+    element.preload = "auto"
+    sound.current = element
+    return () => {
+      element.pause()
+      sound.current = null
+    }
+  }, [soundUrl])
+  useEffect(() => {
+    const element = sound.current
+    if (!element) {
+      return
+    }
+    if (playing) {
+      element.currentTime = live.current.current / live.current.episode.fps
+      element.play().catch(() => undefined)
+    } else {
+      element.pause()
+    }
+  }, [playing, soundUrl])
+
   useEffect(() => {
     if (!playing) {
       return
     }
     const timer = window.setInterval(() => {
       const now = live.current
+      const element = sound.current
+      if (element && !element.paused && !element.ended) {
+        const heard = Math.floor(element.currentTime * now.episode.fps)
+        if (heard < now.duration) {
+          if (heard !== now.current) {
+            onSeek(now.shot.shot_id, heard)
+          }
+          return
+        }
+      }
       const next = now.current + 1
       if (next < now.duration) {
         if (ready(now.urlFor(next))) {
@@ -144,6 +185,7 @@ export function Stage(props: Props) {
         <Viewer url={urlFor(current)} label={`${shot.shot_id}, frame ${current}`} hasPoses={state.has_poses}>
           <span className="badge mono">{shot.shot_id}</span>
           <span className="badge mono">{shot.camera_preset}</span>
+          {soundUrl ? <span className="badge">voice</span> : null}
           {previewing && preview ? (
             <div className="preview-bar">
               <span>
@@ -310,10 +352,41 @@ function ShotStrip({
   onSeek: (shotId: string, frame: number) => void
 }) {
   const episode = state.episode
-  const playhead = ((shot.start_frame + frame) / Math.max(1, episode.total_frames)) * 100
+  // One scene at a time: a half-hour episode has hundreds of shots.
+  const sceneIndex = Math.max(0, episode.scenes.findIndex((item) => item.scene_id === shot.scene_id))
+  const scene = episode.scenes[sceneIndex]
+  const shots = episode.shots.filter((item) => item.scene_id === shot.scene_id)
+  const first = episode.shots.findIndex((item) => item.scene_id === shot.scene_id)
+  const playhead = ((shot.start_frame - scene.start_frame + frame) / Math.max(1, scene.duration_frames)) * 100
   return (
-    <div className="strip" aria-label="Shots">
-      {episode.shots.map((item, index) => (
+    <>
+    {episode.scenes.length > 1 ? (
+      <div className="scene-bar">
+        <label className="select">
+          <select
+            aria-label="Scene"
+            value={scene.scene_id}
+            onChange={(event) => {
+              const target = episode.shots.find((item) => item.scene_id === event.target.value)
+              if (target) {
+                onSeek(target.shot_id, 0)
+              }
+            }}
+          >
+            {episode.scenes.map((item, index) => (
+              <option key={item.scene_id} value={item.scene_id}>
+                Scene {index + 1} of {episode.scenes.length} · {item.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="muted mono">{shots.length} shots</span>
+      </div>
+    ) : null}
+    <div className="strip" aria-label="Shots in this scene">
+      {shots.map((item, position) => {
+        const index = first + position
+        return (
         <button
           key={item.shot_id}
           className={item.shot_id === shot.shot_id ? "strip-shot selected" : "strip-shot"}
@@ -325,9 +398,11 @@ function ShotStrip({
             {index + 1} <em>{item.shot_id}</em>
           </span>
         </button>
-      ))}
+        )
+      })}
       <i className="strip-playhead" style={{ left: `${playhead}%` }} />
     </div>
+    </>
   )
 }
 

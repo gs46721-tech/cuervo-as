@@ -1,16 +1,70 @@
 # Episode pipeline
 
-Jobs run per shot. The episode, script, bible, pose table, voice profiles, and approval list are all inputs. None of them are built into the runner.
-
-`plan` sends the script to `writing`, then that outline to `direction`. Both go through the model router: Claude, then Gemini, then Cursor. The result is a shot plan. It is not applied until you build an episode from it.
-
-`run` dubs lines when you pass voice profiles (`voice_prep` on the same router), asks `review` for an advisory note, and renders each approved shot. A shot that is not approved stays out of the master. Rendered frames are cached by a hash of the shot and the pose table. The same hash on a later run does not draw again.
-
-A dialogue, acting, or camera change changes that shot's hash. A new asset version is written onto a shot only when you opt that shot in with `adopt_asset`. Other shots keep the pin and the cached frames.
-
-Failed draws retry once. FFmpeg encodes each shot, then concatenates the approved shots.
+A script becomes a finished episode in four stages. Each stage writes a file, and that file is the gate for the next stage. The script, the series kit, and the approvals are inputs. None of them are built into the runner.
 
 ```bash
-python3 -m cuervo_pipeline plan script.txt --bible bible.txt
+python3 -m cuervo_pipeline produce script.txt --series series.json --out build/
+```
+
+| Stage | Writes | What happens |
+| --- | --- | --- |
+| script | `script.json` | The screenplay is read into scenes, lines, and action. No model call, so no line is lost. |
+| storyboard | `storyboard.json` | The `direction` route cuts each scene into shots and says who each shot is on. |
+| animation | `takes/`, `episode.json`, `poses.json`, `boards/` | Every line is recorded. Shots are timed to the takes. Lip sync, acting, eyelines, and blinks are laid in. |
+| polish | `notes.json`, `shots/`, `episode.mp4` | Checks and an advisory review run. Approved shots render and join with the soundtrack. |
+
+`--through storyboard` stops after a stage so you can look at its file. A stage whose file exists is not redone, so hand edits to `storyboard.json` and editor work on `episode.json` are kept. `--rebuild` redoes the storyboard and the episode. A storyboard made from a different script is refused until you pass `--rebuild`.
+
+## The series kit
+
+`series.json` holds the cast, the sets, and the pose table. See `examples/sample-series/series.json`.
+
+Each character has an asset id, a rig id, the names a script may use for them, a rest pose, any poses of their own, and a voice. Each set has an asset id and the names a scene heading may use. A character keeps the same side of the stage in every scene.
+
+## Script
+
+The parser reads scene headings (`INT.`, `EXT.`), speaker cues in capitals, `Name: line`, parentheticals, and action paragraphs. A speaker who is not in the kit stops the run. A long speech is split at sentence ends so each line is one take.
+
+`write` drafts a screenplay from a premise through the `writing` route. It outlines first and then writes one scene per call.
+
+```bash
+python3 -m cuervo_pipeline write premise.txt --series series.json --minutes 22 -o script.txt
+```
+
+## Storyboard
+
+The director's cut for a scene must cover every line once and in order. If it does not, or no provider is configured, that scene is cut by a fixed grammar: a wide to establish, a two-shot for the exchange, close-ups on the speaker, a silent reaction after an exclamation, and a reaction to end on. `--no-director` uses the grammar for everything.
+
+## Animation
+
+Dialogue is recorded first. A line is as long as its take, rounded up to a frame, and a shot is as long as its lines plus a lead, gaps, and a tail. The camera scale follows the shot size, and a tight shot centers on its character. `boards/` gets one contact sheet per scene.
+
+Acting comes from the `direction` route, one scene per call: a gesture and an expression for the speaker and a reaction for the listener, chosen from that character's poses. Without a provider, a question gets a shrug, an exclamation gets a point and a reaction, and listeners look at the speaker.
+
+## Polish
+
+`notes.json` lists what to fix or look at, by shot: a line with no take, a take that no longer matches its text, a line cut short, estimated lip sync, a shot over 12 seconds, a shot under half a second, and a cut between two identical framings. The `review` route adds advisory notes per scene. Notes never change a shot.
+
+Rendered shots are cached by a hash of the shot and the pose table, in `shots/cache.json`. A later run draws only the shots that changed. `--approve sh_0004` renders only the shots you name. The soundtrack is built as one continuous track and muxed once, so sound and picture stay in step for the whole episode.
+
+A 27 minute test episode (355 shots, 416 lines, 39,010 frames) built in under five minutes on one core with the fixture voice.
+
+## Perfecting in the editor
+
+```bash
+python3 -m cuervo_editor build/episode.json --poses build/poses.json --takes build/takes
+```
+
+Change shots there, download the episode over `build/episode.json`, and run `produce` again. Only the changed shots render.
+
+## Shot jobs
+
+`run` renders an episode you already have. `plan` is the older two-call outline.
+
+```bash
 python3 -m cuervo_pipeline run episode.json --approve sh_a --out build/
 ```
+
+## What this does not do
+
+The picture is the flat preview renderer: shapes, not drawn characters. The runtime that draws final art is still open. See [runtime-evaluation.md](runtime-evaluation.md).

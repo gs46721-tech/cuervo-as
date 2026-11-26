@@ -16,7 +16,7 @@ from cuervo_ir.frame_time import frame_to_sample_start
 from cuervo_ir.models import DialogueTrack, Episode
 from cuervo_ir.providers.router import ModelRequest, ProviderRouter, ProviderUnavailable
 from cuervo_voice.align import align_line
-from cuervo_voice.synth import FixtureSynth, VoiceError, VoiceSynth
+from cuervo_voice.synth import VoiceError, VoiceSynth, default_synths
 from cuervo_voice.visemes import VISEMES, viseme_keys
 
 SAMPLE_RATE = 48_000
@@ -30,6 +30,9 @@ class VoiceProfile(BaseModel):
     provider_voice_id: str = Field(min_length=1)
     consent: str = Field(min_length=1)
     pronunciation: dict[str, str] = Field(default_factory=dict)
+    # Vendor model and voice settings (ElevenLabs: stability, similarity_boost, style, speed).
+    model_id: str | None = None
+    settings: dict[str, float | bool] = Field(default_factory=dict)
 
 
 class TakeRecord(BaseModel):
@@ -62,7 +65,7 @@ def dub_episode(
     by_character = {profile.character_id: profile for profile in profiles}
     if len(by_character) != len(profiles):
         raise DubError("duplicate voice profile")
-    engines: dict[str, VoiceSynth] = {"fixture": FixtureSynth()}
+    engines: dict[str, VoiceSynth] = default_synths()
     if synths:
         engines.update(synths)
     data = episode.model_dump(mode="json")
@@ -86,7 +89,8 @@ def dub_episode(
                     raise DubError(f"no voice profile for {actor['character_id']}")
                 engine = engines.get(profile.provider)
                 if engine is None:
-                    raise DubError(f"no synth named {profile.provider}")
+                    hint = ": set ELEVENLABS_API_KEY" if profile.provider == "elevenlabs" else ""
+                    raise DubError(f"no synth named {profile.provider}{hint}")
                 sample_count = frame_to_sample_start(track["end_frame"] - track["start_frame"], SAMPLE_RATE, fps)
                 emotion, extra, prep = _prepare(track["text"], router)
                 dictionary = {**profile.pronunciation, **extra}

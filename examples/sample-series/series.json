@@ -1,0 +1,47 @@
+{
+  "kind": "series_kit",
+  "title": "Five Minutes",
+  "fps": 24,
+  "bible": [
+    "Two roommates. Small stakes. Nobody learns anything.",
+    "Nia is dry and precise. Cole is warm and evasive.",
+    "The television never turns on."
+  ],
+  "characters": [
+    {
+      "asset_id": "char_nia",
+      "display_name": "Nia Adeyemi",
+      "rig_id": "rig_nia",
+      "extension_poses": ["deadpan"],
+      "rest_pose": "sit",
+      "voice": {
+        "provider": "fixture",
+        "provider_voice_id": "sample-voice-a",
+        "consent": "Sample data. Not a real performer."
+      }
+    },
+    {
+      "asset_id": "char_cole",
+      "display_name": "Cole Park",
+      "rig_id": "rig_cole",
+      "extension_poses": ["fidget"],
+      "rest_pose": "sit",
+      "voice": {
+        "provider": "fixture",
+        "provider_voice_id": "sample-voice-b",
+        "consent": "Sample data. Not a real performer."
+      }
+    }
+  ],
+  "sets": [
+    {
+      "asset_id": "bg_living_room",
+      "display_name": "Living room",
+      "location_id": "loc_living_room"
+    }
+  ],
+  "poses": {
+    "deadpan": {"brow_l": -0.2, "brow_r": -0.2, "mouth": 0.05},
+    "fidget": {"hand_l": 0.3, "hand_r": -0.3}
+  }
+}

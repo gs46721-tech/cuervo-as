@@ -12,6 +12,7 @@ type Props = {
   onOpen: () => void
   onPalette: () => void
   onTheme: () => void
+  onSettings: () => void
   onRename: (thread: Thread, title: string) => void
   onDeleteThread: (thread: Thread) => void
   onDeleteProject: (card: SessionCard) => void
@@ -75,14 +76,15 @@ export function Sidebar(props: Props) {
       </div>
 
       <footer className="side-foot">
-        <div className="providers" title="Model providers the agent can route to">
+        <button className="providers" title="Accounts and keys" onClick={props.onSettings}>
           {props.providers?.providers.map((item) => (
             <span key={item.name} className={item.available ? "provider on" : "provider"} title={item.available ? `${item.name} · ${item.model ?? ""}` : `${item.name}: no key in the API's environment`}>
               <i />
               {item.name}
             </span>
           ))}
-        </div>
+          {props.providers && !props.providers.providers.some((item) => item.available) ? <span className="link">Connect an account</span> : null}
+        </button>
         <button className="icon-btn" title="Switch between dark and light" onClick={props.onTheme}>
           {icons.sun}
         </button>

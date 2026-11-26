@@ -30,6 +30,7 @@ export type Shot = {
   camera_x: number
   camera_y: number
   camera_locked: boolean
+  has_voice: boolean
   framing: string
   actors: { actor_id: string; character_id: string; facing: string }[]
   assets: { role: string; asset_id: string; version: string }[]
@@ -42,7 +43,7 @@ export type EpisodeView = {
   title: string
   fps: number
   total_frames: number
-  scenes: { scene_id: string; title: string; objective: string }[]
+  scenes: { scene_id: string; title: string; objective: string; start_frame: number; duration_frames: number }[]
   characters: { asset_id: string; display_name: string }[]
   backgrounds: { asset_id: string; display_name: string }[]
   props: { asset_id: string; display_name: string }[]
@@ -93,6 +94,7 @@ export type SessionState = {
   session_id: string
   episode: EpisodeView
   has_poses: boolean
+  has_takes: boolean
   version: number
   undo: number
   redo: number
@@ -111,6 +113,21 @@ export type SessionCard = {
 
 export type ProviderInfo = { name: string; available: boolean; model: string | null }
 export type Providers = { providers: ProviderInfo[]; routes: Record<string, string[]> }
+
+export type ServiceKey = {
+  name: string
+  label: string
+  role: string
+  connected: boolean
+  key_hint: string
+  key_source: "" | "saved" | "environment"
+  model: string
+  base_url: string
+  needs_base: boolean
+  key_url: string
+}
+
+export type KeyCheck = { ok: boolean; message: string; voices?: { voice_id: string; name: string }[] }
 
 async function readError(response: Response): Promise<string> {
   try {
@@ -150,6 +167,11 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
 
 export const api = {
   providers: () => call<Providers>("GET", "/api/providers"),
+  keys: () => call<{ services: ServiceKey[] }>("GET", "/api/settings/keys"),
+  saveKey: (name: string, body: { api_key?: string; model?: string; base_url?: string }) =>
+    call<{ services: ServiceKey[] }>("PUT", `/api/settings/keys/${name}`, body),
+  removeKey: (name: string) => call<{ services: ServiceKey[] }>("DELETE", `/api/settings/keys/${name}`),
+  testKey: (name: string) => call<KeyCheck>("POST", `/api/settings/keys/${name}/test`),
   sessions: () => call<{ sessions: SessionCard[] }>("GET", "/api/sessions"),
   open: (episode: unknown, poses: unknown | null) => call<SessionState>("POST", "/api/sessions", { episode, poses }),
   read: (id: string) => call<SessionState>("GET", `/api/sessions/${id}`),
@@ -178,6 +200,10 @@ export function frameUrl(state: SessionState, shotId: string, frame: number): st
 
 export function changeFrameUrl(state: SessionState, changeId: string, frame: number): string {
   return `/api/sessions/${state.session_id}/changes/${changeId}/frames/${frame}.png?v=${state.version}`
+}
+
+export function audioUrl(state: SessionState, shotId: string): string {
+  return `/api/sessions/${state.session_id}/audio/${shotId}.wav?v=${state.version}`
 }
 
 export function exportUrl(sessionId: string): string {

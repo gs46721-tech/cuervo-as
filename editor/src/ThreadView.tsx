@@ -24,6 +24,7 @@ type Props = {
   onTurn: (turn: Turn, action: "stop" | "accept" | "reject" | "revert") => void
   onChange: (change: Change, action: "accept" | "reject") => void
   onPreview: (change: Change) => void
+  onSettings: () => void
   onJump: (shotId: string) => void
 }
 
@@ -100,6 +101,7 @@ export function ThreadView(props: Props) {
           props.onSend(draft)
         }}
         onStop={() => running && props.onTurn(running, "stop")}
+        onSettings={props.onSettings}
       />
     </main>
   )
@@ -167,8 +169,10 @@ function TurnBlock(props: Props & { turn: Turn; onRetry: (change: Change) => voi
             <strong>The turn failed.</strong> {turn.error}
             {turn.error?.includes("unavailable") ? (
               <small>
-                No model provider answered. Set a key such as ANTHROPIC_API_KEY before starting the API, or start it
-                with CUERVO_EDITOR_STUB=1 to try the page without one.
+                No model account answered.{" "}
+                <button type="button" className="link" onClick={props.onSettings}>
+                  Connect one in Accounts and keys
+                </button>
               </small>
             ) : null}
           </div>
@@ -330,6 +334,7 @@ function Composer({
   seed,
   onSend,
   onStop,
+  onSettings,
 }: {
   state: SessionState
   providers: Providers | null
@@ -338,6 +343,7 @@ function Composer({
   seed: { text: string; shots: string[]; key: number }
   onSend: (draft: Draft) => void
   onStop: () => void
+  onSettings: () => void
 }) {
   const [text, setText] = useState("")
   const [shots, setShots] = useState<string[]>([])
@@ -546,8 +552,10 @@ function Composer({
       </form>
       {providers && !usable.length ? (
         <p className="composer-hint warn">
-          No model provider is configured. Set ANTHROPIC_API_KEY or GEMINI_API_KEY and restart the API, or start it with
-          CUERVO_EDITOR_STUB=1.
+          No model account is connected.{" "}
+          <button type="button" className="link" onClick={onSettings}>
+            Connect Claude, Gemini, or your own endpoint
+          </button>
         </p>
       ) : (
         <p className="composer-hint">

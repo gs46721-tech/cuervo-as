@@ -84,6 +84,8 @@ class Session:
         self.session_id = session_id
         self.episode = episode
         self.poses = poses
+        # Folder of recorded voice takes, when the episode came from the pipeline.
+        self.takes_dir: str | None = None
         self.past: list[dict] = []
         self.future: list[dict] = []
         # Goes up every time the episode changes, so a frame URL can be cached.
@@ -125,6 +127,7 @@ class Session:
             "updated_at": self.updated_at,
             "episode": self.episode.model_dump(mode="json"),
             "poses": self.poses,
+            "takes_dir": self.takes_dir,
             "past": self.past,
             "future": self.future,
             "version": self.version,
@@ -136,6 +139,7 @@ class Session:
         session = cls(data["session_id"], Episode.model_validate(data["episode"]), data.get("poses"))
         session.created_at = data.get("created_at", session.created_at)
         session.updated_at = data.get("updated_at", session.created_at)
+        session.takes_dir = data.get("takes_dir")
         session.past = list(data.get("past", []))
         session.future = list(data.get("future", []))
         session.version = int(data.get("version", 0))
@@ -212,6 +216,7 @@ def session_view(session: Session) -> dict:
         "session_id": session.session_id,
         "episode": summarize(session.episode),
         "has_poses": bool(session.poses),
+        "has_takes": bool(session.takes_dir),
         "version": session.version,
         "undo": len(session.past),
         "redo": len(session.future),
@@ -273,16 +278,32 @@ def change_view(session: Session, change: Change) -> dict:
 
 
 def summarize(episode: Episode) -> dict:
-    shots = [_shot_summary(shot) for scene in episode.scenes for shot in scene.shots]
+    # Shot frames are local to their scene. The page wants one episode clock.
+    shots = []
+    scenes = []
+    offset = 0
+    for scene in episode.scenes:
+        length = max((shot.start_frame + shot.duration_frames for shot in scene.shots), default=0)
+        scenes.append(
+            {
+                "scene_id": scene.scene_id,
+                "title": scene.title,
+                "objective": scene.objective,
+                "start_frame": offset,
+                "duration_frames": length,
+            }
+        )
+        for shot in scene.shots:
+            summary = _shot_summary(shot)
+            summary["start_frame"] += offset
+            shots.append(summary)
+        offset += length
     return {
         "episode_id": episode.episode_id,
         "title": episode.title,
         "fps": episode.fps,
         "total_frames": max((shot["start_frame"] + shot["duration_frames"] for shot in shots), default=0),
-        "scenes": [
-            {"scene_id": scene.scene_id, "title": scene.title, "objective": scene.objective}
-            for scene in episode.scenes
-        ],
+        "scenes": scenes,
         "characters": [
             {"asset_id": item.asset_id, "display_name": item.display_name}
             for item in episode.assets.characters
@@ -317,6 +338,7 @@ def _shot_summary(shot) -> dict:
         "camera_x": shot.camera.transform.x,
         "camera_y": shot.camera.transform.y,
         "camera_locked": any("camera" in properties for properties in locks.values()),
+        "has_voice": any(line.voice_take_id for line in shot.dialogue_tracks),
         "framing": shot.camera.framing,
         "actors": [
             {"actor_id": actor.actor_id, "character_id": actor.character_id, "facing": actor.facing}

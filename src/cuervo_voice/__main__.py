@@ -2,6 +2,7 @@ import argparse
 import json
 from pathlib import Path
 
+from cuervo_ir.credentials import Credentials
 from cuervo_ir.models import Episode
 from cuervo_voice.dub import VoiceProfile, dub_episode
 
@@ -13,6 +14,7 @@ def main() -> None:
     parser.add_argument("-o", "--output", type=Path, required=True)
     parser.add_argument("--wav-dir", type=Path, required=True)
     args = parser.parse_args()
+    Credentials()
     episode = Episode.model_validate(json.loads(args.episode.read_text(encoding="utf-8")))
     profiles = [VoiceProfile.model_validate(item) for item in json.loads(args.profiles.read_text(encoding="utf-8"))]
     dubbed, takes = dub_episode(episode, profiles)

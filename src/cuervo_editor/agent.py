@@ -33,10 +33,14 @@ PLAN_SYSTEM = (
     "Decide which shots it applies to and write one concrete instruction per shot. Each "
     "instruction may change timing, the pose on an existing track, or the camera of that "
     "shot. Nothing else can be edited. If the direction is a question, or needs no edit, "
-    "answer it in `reply` and return no edits. Never invent shot ids. Return only JSON: "
+    "answer it in `reply` and return no edits. Never invent shot ids. A long episode lists only the "
+    "current scene in full. `other_scenes` names the rest, and their shot ids are valid targets. Return only JSON: "
     '{"reply": string, "edits": [{"shot_id": string, "instruction": string}]}. '
     "`reply` is one or two plain sentences for the director."
 )
+
+
+LARGE_EPISODE_SHOTS = 60
 
 
 class PlannedEdit(BaseModel):
@@ -66,6 +70,21 @@ def plan_turn(
     """Ask the `editor_assist` route where the direction lands. Returns the plan and who wrote it."""
 
     view = summarize(episode)
+    shots = view["shots"]
+    elsewhere: list[dict] = []
+    if len(shots) > LARGE_EPISODE_SHOTS:
+        # A full episode does not fit in one request. Send the scene on screen in full and the rest as an index.
+        focus = next((shot["scene_id"] for shot in shots if shot["shot_id"] == turn.focus_shot_id), shots[0]["scene_id"])
+        elsewhere = [
+            {
+                "scene_id": scene["scene_id"],
+                "title": scene["title"],
+                "shot_ids": [shot["shot_id"] for shot in shots if shot["scene_id"] == scene["scene_id"]],
+            }
+            for scene in view["scenes"]
+            if scene["scene_id"] != focus
+        ]
+        shots = [shot for shot in shots if shot["scene_id"] == focus]
     history = [
         {"direction": earlier.instruction, "reply": earlier.reply}
         for earlier in thread.turns[-6:]
@@ -98,8 +117,9 @@ def plan_turn(
                                     for line in shot["lines"]
                                 ],
                             }
-                            for shot in view["shots"]
+                            for shot in shots
                         ],
+                        "other_scenes": elsewhere,
                     },
                 }
             ),

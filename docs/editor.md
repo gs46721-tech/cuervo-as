@@ -17,6 +17,12 @@ For UI work, run `python3 -m cuervo_editor` and `cd editor && npm run dev`, then
 
 `CUERVO_EDITOR_STUB=1` registers a local `devstub` provider in front of the agent routes, so the page can be tried without API keys. It matches keywords and does not understand the direction. Leave it unset when Claude, Gemini, or Cursor credentials are available.
 
+## Accounts and keys
+
+Each person connects their own accounts in the editor: click the provider list at the bottom of the sidebar. Claude, Gemini, any OpenAI-compatible endpoint, and ElevenLabs each take an API key, and optionally a model. **Save and test** makes one small read-only request to check the key.
+
+Keys are saved to `~/.cuervo/keys.json`, readable only by that user. `CUERVO_KEYS_FILE` moves the file. The API never returns a whole key. A saved key wins over one exported in the shell, and the pipeline commands read the same file. These are API keys. Signing in with a vendor account is not supported.
+
 ## The page
 
 | Pane | What it holds |
@@ -68,6 +74,8 @@ Projects, threads, and undo history are JSON files under `~/.cuervo/projects`. S
 | Route | Does |
 | --- | --- |
 | `GET /api/providers` | Providers on the agent routes and whether each has a key |
+| `GET /api/settings/keys`, `PUT`, `DELETE /api/settings/keys/{name}` | Read, save, or remove a saved key. `POST .../test` checks it |
+| `GET /api/sessions/{id}/audio/{shot}.wav` | The voice takes for one shot, when the project has a takes folder |
 | `GET`, `POST /api/sessions` | List projects, open an episode as a project |
 | `GET`, `DELETE /api/sessions/{id}` | Read or close a project |
 | `GET /api/sessions/{id}/episode.json` | The current episode |

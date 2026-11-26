@@ -6,9 +6,11 @@ version is rebuilt only for shots the caller opts in.
 
 from __future__ import annotations
 
+import array
 import hashlib
 import json
 import subprocess
+import wave
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +20,7 @@ from cuervo_ir.models import Episode, Shot
 from cuervo_ir.providers.router import ModelRequest, ProviderRouter, ProviderUnavailable
 from cuervo_runtime.draw import render_png
 from cuervo_voice.dub import VoiceProfile, dub_episode
+from cuervo_voice.takes import SAMPLE_RATE, read_pcm
 
 
 class PipelineError(RuntimeError):
@@ -88,17 +91,40 @@ def run_episode(
     generations: dict[str, str] | None = None,
     render_frame=render_png,
     max_attempts: int = 2,
+    takes_dir: Path | None = None,
+    review: bool = True,
+    progress=None,
 ) -> PipelineResult:
+    """Render the approved shots and join them.
+
+    With `takes_dir`, each line's recorded take is laid on the soundtrack at
+    the frame the line starts, and the master carries that audio. The cache is
+    also kept in `out_dir/cache.json`, so a later run only redraws what changed.
+    """
+
     if profiles:
         episode, _takes = dub_episode(episode, profiles, router=router)
-    store = cache if cache is not None else {}
-    generations = generations if generations is not None else {}
     out_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = out_dir / "cache.json"
+    if cache is not None:
+        store = cache
+    else:
+        try:
+            store = json.loads(cache_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            store = {}
+    total = sum(len(scene.shots) for scene in episode.scenes)
+    done = 0
+    sound: list[tuple[int, bytes]] = []
+    generations = generations if generations is not None else {}
     reports: list[ShotReport] = []
     segments: list[Path] = []
     for scene in episode.scenes:
         for shot in scene.shots:
             key = fingerprint(shot, poses, generations)
+            done += 1
+            if progress and (done % 25 == 0 or done == total):
+                progress(done, total)
             if shot.shot_id not in approved:
                 reports.append(
                     ShotReport(
@@ -127,8 +153,9 @@ def run_episode(
                     )
                 )
                 segments.append(cached_path)
+                sound.append((shot.duration_frames, shot_audio(shot, episode.fps, takes_dir)))
                 continue
-            note = _review(router, shot)
+            note = _review(router, shot) if review else ""
             pngs, attempts, error = _render_with_retry(
                 episode, shot, poses, render_frame, max_attempts
             )
@@ -176,8 +203,48 @@ def run_episode(
                 )
             )
             segments.append(mp4)
+            sound.append((shot.duration_frames, shot_audio(shot, episode.fps, takes_dir)))
     master = _concat(out_dir / "episode.mp4", segments) if segments else None
+    if master is not None and takes_dir is not None and any(pcm.strip(b"\x00") for _frames, pcm in sound):
+        _add_soundtrack(master, b"".join(pcm for _frames, pcm in sound))
+    cache_file.write_text(json.dumps(store), encoding="utf-8")
     return PipelineResult(reports=reports, master=master, cache=store)
+
+
+def shot_audio(shot: Shot, fps: int, takes_dir: Path | None) -> bytes:
+    """16-bit mono PCM for one shot, exactly as long as its frames."""
+
+    length = shot.duration_frames * SAMPLE_RATE // fps
+    track = array.array("h", bytes(length * 2))
+    if takes_dir is None:
+        return track.tobytes()
+    for line in shot.dialogue_tracks:
+        pcm = read_pcm(takes_dir, line.voice_take_id) if line.voice_take_id else None
+        if not pcm:
+            continue
+        take = array.array("h", pcm)
+        start = line.start_frame * SAMPLE_RATE // fps
+        room = min(len(take), length - start)
+        if room <= 0:
+            continue
+        # Lines in one shot do not overlap, so a take is copied in, not summed.
+        track[start : start + room] = take[:room]
+    return track.tobytes()
+
+
+def _add_soundtrack(master: Path, pcm: bytes) -> None:
+    """Mux one continuous soundtrack onto the joined picture. One encode keeps it in sync end to end."""
+
+    sound = master.with_suffix(".wav")
+    with wave.open(str(sound), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(SAMPLE_RATE)
+        handle.writeframes(pcm)
+    silent = master.with_name("picture.mp4")
+    master.replace(silent)
+    _ffmpeg(["-i", str(silent), "-i", str(sound), "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest", str(master)])
+    silent.unlink(missing_ok=True)
 
 
 def _review(router: ProviderRouter, shot: Shot) -> str:

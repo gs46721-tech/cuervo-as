@@ -13,6 +13,7 @@ import {
 } from "./api"
 import { Mark, icons } from "./icons"
 import { type Command, Palette } from "./Palette"
+import { Settings } from "./Settings"
 import { Sidebar } from "./Sidebar"
 import { Stage } from "./Stage"
 import { type Draft, ThreadView } from "./ThreadView"
@@ -53,6 +54,7 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => stored("cuervo.sidebar", SIDEBAR_FLOATS))
   const [stageOpen, setStageOpen] = useState(() => stored("cuervo.stage", STAGE_FLOATS))
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [dropping, setDropping] = useState(false)
   const [booted, setBooted] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
@@ -412,6 +414,7 @@ export function App() {
       { id: "sidebar", group: "View", label: "Toggle sidebar", hint: "⌘B", run: () => setSidebarOpen((open) => !open) },
       { id: "stage", group: "View", label: "Toggle stage", hint: "⌘J", run: () => setStageOpen((open) => !open) },
       { id: "theme", group: "View", label: "Switch between dark and light", run: toggleTheme },
+      { id: "keys", group: "Project", label: "Accounts and keys…", run: () => setSettingsOpen(true) },
     ]
     if (!state) {
       return list
@@ -499,6 +502,7 @@ export function App() {
           onOpen={() => picker.current?.click()}
           onPalette={() => setPaletteOpen(true)}
           onTheme={toggleTheme}
+          onSettings={() => setSettingsOpen(true)}
           onRename={(item, title) => state && void run(api.renameThread(state.session_id, item.thread_id, title))}
           onDeleteThread={(item) => {
             if (state && window.confirm(`Delete the thread "${item.title}"? Changes it already applied stay in the episode.`)) {
@@ -541,6 +545,7 @@ export function App() {
             onTurn={onTurn}
             onChange={onChange}
             onPreview={onPreview}
+            onSettings={() => setSettingsOpen(true)}
             onJump={(id) => {
               setStageOpen(true)
               seek(id, 0)
@@ -572,6 +577,14 @@ export function App() {
         />
       ) : null}
 
+      {settingsOpen ? (
+        <Settings
+          onClose={() => setSettingsOpen(false)}
+          onChanged={() => {
+            api.providers().then(setProviders).catch(() => undefined)
+          }}
+        />
+      ) : null}
       {paletteOpen ? <Palette commands={commands} onClose={() => setPaletteOpen(false)} /> : null}
       {dropping ? (
         <div className="dropzone">

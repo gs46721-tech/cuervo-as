@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import threading
+import wave
+from io import BytesIO
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -17,9 +19,12 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
+from cuervo_ir.credentials import CredentialError, Credentials, check
 from cuervo_ir.models import Episode, LockProperty
 from cuervo_ir.providers.router import ProviderRouter, build_default_router
 from cuervo_runtime.draw import render_png
+from cuervo_pipeline.run import shot_audio
+from cuervo_voice.takes import SAMPLE_RATE
 from cuervo_edit.edits import EditPatch, apply_edit
 from cuervo_editor.agent import run_turn
 from cuervo_editor.store import (
@@ -71,6 +76,16 @@ class TurnBody(BaseModel):
     mode: TurnMode = "review"
 
 
+class KeyBody(BaseModel):
+    """Fields left out are kept. An empty string clears that field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str | None = Field(default=None, max_length=400)
+    model: str | None = Field(default=None, max_length=120)
+    base_url: str | None = Field(default=None, max_length=300)
+
+
 class LockBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -85,6 +100,7 @@ def create_app(
     home: Path | None = None,
     background: bool = True,
     dist: Path | None = None,
+    credentials: Credentials | None = None,
 ) -> FastAPI:
     """`home` keeps projects on disk. `background=False` runs a turn inside the request, for tests."""
 
@@ -96,7 +112,10 @@ def create_app(
         allow_headers=["*"],
     )
     app.state.store = SessionStore(home)
+    # Saved keys are applied before the providers read the environment.
+    app.state.credentials = credentials
     app.state.router = router if router is not None else default_router()
+    rebuild_router = router is None
 
     def state(session: Session, **extra) -> dict:
         with session.lock:
@@ -109,6 +128,44 @@ def create_app(
             except EditorError as exc:
                 raise HTTPException(422, str(exc)) from exc
             app.state.store.save(session)
+
+    def keys() -> Credentials:
+        if app.state.credentials is None:
+            raise HTTPException(404, "this editor was started without a keys file")
+        return app.state.credentials
+
+    def changed() -> dict:
+        if rebuild_router:
+            app.state.router = default_router()
+        return {"services": keys().view()}
+
+    @app.get("/api/settings/keys")
+    def list_keys():
+        return {"services": keys().view()}
+
+    @app.put("/api/settings/keys/{name}")
+    def save_key(name: str, body: KeyBody):
+        try:
+            keys().set(name, key=body.api_key, model=body.model, base=body.base_url)
+        except CredentialError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return changed()
+
+    @app.delete("/api/settings/keys/{name}")
+    def remove_key(name: str):
+        try:
+            keys().remove(name)
+        except CredentialError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return changed()
+
+    @app.post("/api/settings/keys/{name}/test")
+    def test_key(name: str):
+        keys()
+        try:
+            return check(name)
+        except CredentialError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.get("/api/providers")
     def providers():
@@ -182,6 +239,26 @@ def create_app(
         except Exception as exc:
             raise HTTPException(422, str(exc)) from exc
         return _png(revised, change.shot_id, frame, session.poses)
+
+    @app.get("/api/sessions/{session_id}/audio/{shot_id}.wav")
+    def audio(session_id: str, shot_id: str):
+        """The shot's voice takes, laid at their line starts. As long as the shot."""
+
+        session = _session(app, session_id)
+        if not session.takes_dir:
+            raise HTTPException(404, "this project has no voice takes")
+        try:
+            shot = find_shot(session.episode, shot_id)
+        except EditorError as exc:
+            raise HTTPException(404, "unknown shot") from exc
+        pcm = shot_audio(shot, session.episode.fps, Path(session.takes_dir))
+        buffer = BytesIO()
+        with wave.open(buffer, "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(SAMPLE_RATE)
+            handle.writeframes(pcm)
+        return Response(content=buffer.getvalue(), media_type="audio/wav", headers={"cache-control": "no-store"})
 
     # -- threads and turns --------------------------------------------------
 
@@ -381,7 +458,7 @@ def _png(episode: Episode, shot_id: str, frame: int, poses, cache: bool = False)
 def __getattr__(name: str):
     # `cuervo_editor.api:app` is built on first use, so importing this module reads no disk.
     if name == "app":
-        application = create_app(home=default_home())
+        application = create_app(home=default_home(), credentials=Credentials())
         globals()["app"] = application
         return application
     raise AttributeError(name)

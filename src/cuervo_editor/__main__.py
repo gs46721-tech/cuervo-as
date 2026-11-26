@@ -1,6 +1,6 @@
 """Series editor API.
 
-    python3 -m cuervo_editor [episode.json ...] [--poses poses.json]
+    python3 -m cuervo_editor [episode.json ...] [--poses poses.json] [--takes takes/]
 
 Episodes named on the command line open as projects. The editor ships none.
 """
@@ -20,6 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="cuervo_editor", description="Cuervo series editor API")
     parser.add_argument("episodes", nargs="*", type=Path, help="episode JSON files to open as projects")
     parser.add_argument("--poses", type=Path, help="series pose table for those episodes")
+    parser.add_argument("--takes", type=Path, help="folder of voice takes for those episodes, to hear the dialogue")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -32,7 +33,10 @@ def main() -> None:
     for path in args.episodes:
         episode = Episode.model_validate(json.loads(path.read_text(encoding="utf-8")))
         if episode.episode_id not in already:
-            store.open(episode, poses)
+            _session_id, session = store.open(episode, poses)
+            if args.takes:
+                session.takes_dir = str(args.takes.resolve())
+                store.save(session)
     uvicorn.run(app, host=args.host, port=args.port)
 
 

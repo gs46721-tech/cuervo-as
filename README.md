@@ -14,11 +14,11 @@ The technical blueprint is [`docs/ai-animation-studio-blueprint.pdf`](docs/ai-an
 | `schemas/animation-ir-v0.schema.json` | JSON Schema generated from the models |
 | `src/cuervo_ir/` | IR models, timing patches, and the Claude / Cursor / Gemini router |
 | `src/cuervo_runtime/` | Headless flat 2D preview. Not a permanent runtime choice |
-| `src/cuervo_voice/` | Voice profiles, alignment, visemes. Vendor ids stay outside the IR |
+| `src/cuervo_voice/` | ElevenLabs and fixture voices, takes, alignment, visemes |
 | `src/cuervo_edit/` | Typed natural-language shot edits through the model router |
 | `editor/` | React editor: agent threads, reviewable changes, stage, timeline |
 | `src/cuervo_editor/` | Editor API: projects, threads, agent turns, undo history |
-| `src/cuervo_pipeline/` | Shot jobs, cache, approvals, and FFmpeg assembly |
+| `src/cuervo_pipeline/` | Script to master: screenplay, storyboard, animation, polish, render |
 | `examples/` | Sample episode and sample series notes |
 | `tests/` | Engine tests on a generic fixture, plus sample-episode tests |
 
@@ -35,6 +35,15 @@ python3 -m cuervo_runtime examples/reference-scene.json --shot sh_establish --fr
 python3 -m cuervo_voice examples/reference-scene.json examples/sample-series/voices.json \
   -o /tmp/dubbed.json --wav-dir /tmp/takes
 ```
+
+## Make an episode
+
+```bash
+python3 -m cuervo_pipeline produce examples/sample-series/five-minutes.script.txt \
+  --series examples/sample-series/series.json --out build/
+```
+
+Script, storyboard, animation, and polish each write a file under `build/`. The result is `build/episode.mp4` with voices and lip sync. See [`docs/pipeline.md`](docs/pipeline.md) and [`docs/voice.md`](docs/voice.md).
 
 ## Editor
 
