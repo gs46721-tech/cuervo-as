@@ -25,7 +25,6 @@ from cuervo_ir.providers.router import ProviderRouter, build_default_router
 from cuervo_runtime.draw import render_png
 from cuervo_pipeline.run import shot_audio
 from cuervo_voice.takes import SAMPLE_RATE
-from cuervo_edit.edits import EditPatch, apply_edit
 from cuervo_editor.agent import run_turn
 from cuervo_editor.store import (
     EditorError,
@@ -37,6 +36,7 @@ from cuervo_editor.store import (
     accept_change,
     find_shot,
     new_id,
+    preview_change,
     redo,
     reject_change,
     revert_turn,
@@ -48,7 +48,7 @@ from cuervo_editor.store import (
 )
 from cuervo_editor.stub import DevStub
 
-AGENT_STEPS = ("editor_assist", "ir_patch")
+AGENT_STEPS = ("editor_assist",)
 
 
 class OpenBody(BaseModel):
@@ -232,12 +232,10 @@ def create_app(
             change = session.change(change_id)
         except EditorError as exc:
             raise HTTPException(404, str(exc)) from exc
-        if change.status != "pending" or change.patch is None:
-            raise HTTPException(409, "this change is not waiting for review")
         try:
-            revised = apply_edit(session.episode, EditPatch.model_validate(change.patch))
-        except Exception as exc:
-            raise HTTPException(422, str(exc)) from exc
+            revised = preview_change(session, change)
+        except EditorError as exc:
+            raise HTTPException(409, str(exc)) from exc
         return _png(revised, change.shot_id, frame, session.poses)
 
     @app.get("/api/sessions/{session_id}/audio/{shot_id}.wav")
@@ -410,10 +408,7 @@ def default_router() -> ProviderRouter:
     if os.environ.get("CUERVO_EDITOR_STUB") == "1":
         router.register(
             DevStub(),
-            steps={
-                "ir_patch": ("devstub", "claude", "gemini", "cursor"),
-                "editor_assist": ("devstub", "cursor", "claude", "gemini"),
-            },
+            steps={"editor_assist": ("devstub", "cursor", "claude", "gemini")},
         )
     return router
 

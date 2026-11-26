@@ -5,48 +5,34 @@ from fastapi.testclient import TestClient
 from cuervo_ir.providers.router import ModelRequest, ModelResponse, ProviderRouter
 from cuervo_editor.api import create_app
 from cuervo_editor.stub import DevStub
+from cuervo_pipeline.produce import produce
 from tests.fixtures import solo_episode, stage_episode
+from tests.test_production import SCRIPT, _kit
 
 
-class Stub:
-    """Plans whatever shots the test names, and always cuts closer."""
+class Crew:
+    """A model that types the cues the test hands it, one reply per round."""
 
     name = "claude"
     model = "stub"
 
-    def __init__(self, plan: dict | None = None):
-        self.plan = plan
-        self.steps: list[str] = []
+    def __init__(self, *replies: str):
+        self.replies = list(replies) or ['camera {on_screen} close_up\ndone "Cut closer."']
+        self.briefs: list[dict] = []
 
     def available(self) -> bool:
         return True
 
     def complete(self, request: ModelRequest) -> ModelResponse:
-        self.steps.append(request.step)
-        payload = json.loads(request.user)
-        if request.step == "editor_assist":
-            assert self.plan is not None
-            return ModelResponse(provider="claude", model="stub", text=json.dumps(self.plan))
-        assert request.step == "ir_patch"
-        return ModelResponse(
-            provider="claude",
-            model="stub",
-            text=json.dumps(
-                {
-                    "kind": "edit_patch",
-                    "patch_id": "patch_editor",
-                    "target_shot_id": payload["target_shot_id"],
-                    "base_revision": payload["base_revision"],
-                    "reason": payload["instruction"],
-                    "camera": {"preset": "close_up", "x": 30},
-                }
-            ),
-        )
+        assert request.step == "editor_assist"
+        brief = json.loads(request.user)
+        self.briefs.append(brief)
+        reply = self.replies[min(len(self.briefs), len(self.replies)) - 1]
+        return ModelResponse(provider="claude", model="stub", text=reply.replace("{on_screen}", brief["on_screen"]))
 
 
-def _client(stub: Stub | None = None, **options) -> TestClient:
-    router = ProviderRouter({"claude": stub or Stub()})
-    return TestClient(create_app(router, background=False, **options))
+def _client(crew: Crew | None = None, **options) -> TestClient:
+    return TestClient(create_app(ProviderRouter({"claude": crew or Crew()}), background=False, **options))
 
 
 def _open(client: TestClient, episode, poses=None) -> dict:
@@ -75,7 +61,7 @@ def test_two_unrelated_episodes_edit_and_undo():
     first = _open(client, stage_episode())
     second = _open(client, solo_episode())
     assert second["episode"]["episode_id"] == "ep_a"
-    assert first["episode"]["shots"][0]["shot_id"] == "sh_main"
+    assert first["episode"]["shots"][0]["label"] == "Shot 1"
     session_id = first["session_id"]
     frame = client.get(f"/api/sessions/{session_id}/frames/sh_main/0.png")
     assert frame.status_code == 200
@@ -83,10 +69,12 @@ def test_two_unrelated_episodes_edit_and_undo():
 
     turn = _turn(client, session_id, instruction="cut closer", shot_ids=["sh_main"])
     assert turn["status"] == "done"
+    assert turn["reply"] == "Cut closer."
     change = turn["changes"][0]
     assert change["state"] == "pending"
-    assert "camera" in change["affected"]
-    assert {"target": "camera", "field": "preset", "before": "wide", "after": "close_up"} in change["diff"]
+    # The page gets a sentence, never the cue behind it.
+    assert change["summary"] == ["Reframe shot 1 from a wide shot to a close-up."]
+    assert "cues" not in change and "camera sh_main" not in json.dumps(turn)
     # Nothing is written until the change is accepted.
     assert _shot(client.get(f"/api/sessions/{session_id}").json(), "sh_main")["camera_preset"] == "wide"
     preview = client.get(f"/api/sessions/{session_id}/changes/{change['change_id']}/frames/0.png")
@@ -122,63 +110,66 @@ def test_series_pose_table_is_required_to_preview_an_extension():
     assert framed.content.startswith(b"\x89PNG")
 
 
-def test_lock_blocks_the_next_camera_change_until_unlocked():
+def test_a_locked_camera_is_refused_in_plain_words_until_unlocked():
     client = _client()
     session_id = _open(client, stage_episode())["session_id"]
     lock = {"shot_id": "sh_main", "track_id": "tr_body", "properties": ["camera"]}
     locked = client.post(f"/api/sessions/{session_id}/lock", json=lock)
-    assert locked.status_code == 200
     assert _shot(locked.json(), "sh_main")["camera_locked"] is True
     blocked = _turn(client, session_id, instruction="cut closer", shot_ids=["sh_main"])
-    assert blocked["changes"][0]["state"] == "failed"
-    assert "camera" in blocked["changes"][0]["error"].lower()
+    assert blocked["changes"] == []
+    assert blocked["reply"] == "The camera is locked on shot 1."
+    assert [step["label"] for step in blocked["steps"] if step["status"] == "failed"] == ["The camera is locked on shot 1"]
     unlocked = client.post(f"/api/sessions/{session_id}/lock", json={**lock, "properties": []}).json()
     assert _shot(unlocked, "sh_main")["camera_locked"] is False
     assert _turn(client, session_id, instruction="cut closer", shot_ids=["sh_main"])["changes"][0]["state"] == "pending"
 
 
-def test_agent_picks_the_shots_when_none_are_pinned():
-    plan = {
-        "reply": "Both shots get a closer camera.",
-        "edits": [
-            {"shot_id": "sh_main", "instruction": "cut to a close up"},
-            {"shot_id": "sh_next", "instruction": "cut to a close up"},
-        ],
-    }
-    stub = Stub(plan)
-    client = _client(stub)
+def test_the_agent_looks_around_then_changes_several_shots():
+    crew = Crew(
+        "scenes\nshow sh_next",
+        'camera sh_main close_up\ncamera sh_next close_up\nact sh_next act_a shrug 0..12\ndone "Both shots are closer, and there is a shrug at the top of shot 2."',
+    )
+    client = _client(crew)
     session_id = _open(client, stage_episode())["session_id"]
-    turn = _turn(client, session_id, instruction="everything closer", focus_shot_id="sh_main")
-    assert stub.steps == ["editor_assist", "ir_patch", "ir_patch"]
-    assert turn["reply"] == "Both shots get a closer camera."
+    turn = _turn(client, session_id, instruction="everything closer, and a shrug", focus_shot_id="sh_main")
+    assert len(crew.briefs) == 2
+    # The second round sees what the read cues printed.
+    assert "> show sh_next" in crew.briefs[1]["session"] and "tr_next_body" in crew.briefs[1]["session"]
+    assert turn["reply"].startswith("Both shots are closer")
     assert [change["shot_id"] for change in turn["changes"]] == ["sh_main", "sh_next"]
-    assert [step["status"] for step in turn["steps"]] == ["done", "done", "done"]
+    assert turn["changes"][1]["summary"] == [
+        "Reframe shot 2 from a two-shot to a close-up.",
+        "Add a shrug for Figure in shot 2, from 0 s to 0.5 s.",
+    ]
+    assert [step["label"] for step in turn["steps"]][:2] == ["Looked over the episode", "Looked at shot 2"]
 
     accepted = client.post(f"/api/sessions/{session_id}/turns/{turn['turn_id']}/accept").json()
     assert accepted["undo"] == 2
     assert _shot(accepted, "sh_next")["camera_preset"] == "close_up"
+    assert any(track["pose"] == "shrug" and track["who"] == "Figure" for track in _shot(accepted, "sh_next")["tracks"])
     reverted = client.post(f"/api/sessions/{session_id}/turns/{turn['turn_id']}/revert").json()
     assert reverted["undo"] == 0
-    assert _shot(reverted, "sh_main")["camera_preset"] == "wide"
     assert _shot(reverted, "sh_next")["camera_preset"] == "two_shot"
 
 
+def test_a_failed_cue_goes_back_to_the_agent_and_pinned_shots_are_enforced():
+    crew = Crew("show sh_main\npose sh_main tr_face dance", 'pose sh_main tr_face react\ncamera sh_next wide\ndone "Changed the face."')
+    client = _client(crew)
+    session_id = _open(client, stage_episode())["session_id"]
+    turn = _turn(client, session_id, instruction="make the face react", shot_ids=["sh_main"])
+    assert "error: Figure has no pose called dance" in crew.briefs[1]["session"]
+    assert [change["shot_id"] for change in turn["changes"]] == ["sh_main"]
+    assert turn["changes"][0]["summary"] == ["Change Figure's expression from hold to react in shot 1."]
+    assert any("pinned other shots" in step["label"] for step in turn["steps"])
+
+
 def test_a_question_gets_a_reply_and_no_changes():
-    stub = Stub({"reply": "Two shots, 72 frames.", "edits": []})
-    client = _client(stub)
+    client = _client(Crew('done "Two shots, three seconds."'))
     session_id = _open(client, stage_episode())["session_id"]
     turn = _turn(client, session_id, instruction="how long is this?")
-    assert turn["reply"] == "Two shots, 72 frames."
+    assert turn["reply"] == "Two shots, three seconds."
     assert turn["changes"] == []
-    assert stub.steps == ["editor_assist"]
-
-
-def test_a_plan_for_an_unknown_shot_fails_the_turn():
-    client = _client(Stub({"reply": "", "edits": [{"shot_id": "sh_missing", "instruction": "closer"}]}))
-    session_id = _open(client, stage_episode())["session_id"]
-    turn = _turn(client, session_id, instruction="closer")
-    assert turn["status"] == "failed"
-    assert "sh_missing" in turn["error"]
 
 
 def test_auto_mode_applies_and_a_later_edit_discards_what_was_undone():
@@ -206,6 +197,49 @@ def test_a_waiting_change_goes_stale_when_its_shot_moves_on():
     assert refused.status_code == 422
 
 
+def test_hold_trim_move_drop_and_cut_keep_the_scene_in_order():
+    crew = Crew('hold sh_main 12\nmove sh_main tr_gesture 6..30\ndrop sh_main tr_gaze\ntrim sh_next 6\ndone "Retimed."', 'cut sh_next\ndone "Cut it."')
+    client = _client(crew)
+    session_id = _open(client, stage_episode())["session_id"]
+    turn = _turn(client, session_id, instruction="retime", mode="auto")
+    assert turn["changes"][0]["summary"] == [
+        "Hold shot 1 for 12 more frames (0.5 s).",
+        "Move Figure's shrug in shot 1 to run from 0.2 s to 1.2 s.",
+        "Remove Figure's idle from shot 1.",
+    ]
+    state = client.get(f"/api/sessions/{session_id}").json()
+    main, following = _shot(state, "sh_main"), _shot(state, "sh_next")
+    assert main["duration_frames"] == 60 and following["start_frame"] == 60 and following["duration_frames"] == 18
+    # Tracks that ran to the end of the shot still do.
+    assert {track["track_id"]: track["end_frame"] for track in main["tracks"]} == {"tr_body": 60, "tr_gesture": 30, "tr_face": 60}
+    _turn(client, session_id, instruction="lose the second shot", mode="auto")
+    state = client.get(f"/api/sessions/{session_id}").json()
+    assert [shot["shot_id"] for shot in state["episode"]["shots"]] == ["sh_main"]
+    assert state["episode"]["total_frames"] == 60
+
+
+def test_rewriting_a_line_records_it_again_and_retimes_the_shot(tmp_path):
+    built = produce(SCRIPT, _kit(), tmp_path, router=None, through="animation", log=lambda _line: None)
+    crew = Crew('find "small one"', 'say sh_0002 ln_0001 "Hand me the very small one, the one by your elbow."\ndone "Rewrote it."')
+    app = create_app(ProviderRouter({"claude": crew}), background=False)
+    client = TestClient(app)
+    opened = _open(client, built.episode)
+    session_id = opened["session_id"]
+    app.state.store.get(session_id).takes_dir = str(tmp_path / "takes")
+    before = _shot(opened, "sh_0002")
+    turn = _turn(client, session_id, instruction="make the first line longer", mode="auto")
+    assert 'ln_0001 act_ada: "Hand me the small one."' in crew.briefs[1]["session"]
+    assert turn["changes"][0]["summary"][0].endswith("It is recorded again and the shot is retimed to it.")
+    after = _shot(client.get(f"/api/sessions/{session_id}").json(), "sh_0002")
+    line = after["lines"][0]
+    assert line["text"].startswith("Hand me the very small one")
+    grew = after["duration_frames"] - before["duration_frames"]
+    assert grew > 0 and line["end_frame"] - before["lines"][0]["end_frame"] == grew
+    # The audio the page plays is the new take, at the new length.
+    wav = client.get(f"/api/sessions/{session_id}/audio/sh_0002.wav")
+    assert len(wav.content) - 44 == after["duration_frames"] * 48_000 // 24 * 2
+
+
 def test_projects_and_threads_survive_a_restart(tmp_path):
     client = _client(home=tmp_path)
     session_id = _open(client, stage_episode())["session_id"]
@@ -225,14 +259,10 @@ def test_projects_and_threads_survive_a_restart(tmp_path):
     assert _client(home=tmp_path).get("/api/sessions").json()["sessions"] == []
 
 
-def test_dev_stub_runs_a_whole_turn_without_keys():
-    router = ProviderRouter(
-        {"devstub": DevStub()},
-        {"editor_assist": ("devstub",), "ir_patch": ("devstub",)},
-    )
+def test_dev_stub_runs_a_whole_turn_without_an_account():
+    router = ProviderRouter({"devstub": DevStub()}, {"editor_assist": ("devstub",)})
     client = TestClient(create_app(router, background=False))
-    listed = client.get("/api/providers").json()
-    assert listed["providers"] == [{"name": "devstub", "available": True, "model": "keywords"}]
+    assert client.get("/api/providers").json()["providers"] == [{"name": "devstub", "available": True, "model": "keywords"}]
     session_id = _open(client, stage_episode())["session_id"]
     turn = _turn(client, session_id, instruction="hold every shot 6 more frames", mode="auto")
     assert [change["state"] for change in turn["changes"]] == ["applied", "applied"]
@@ -240,3 +270,5 @@ def test_dev_stub_runs_a_whole_turn_without_keys():
     assert _shot(state, "sh_main")["duration_frames"] == 54
     assert _shot(state, "sh_next")["start_frame"] == 54
     assert state["episode"]["total_frames"] == 84
+    shrug = _turn(client, session_id, instruction="give them a point", focus_shot_id="sh_next", mode="auto")
+    assert shrug["changes"][0]["summary"] == ["Add a point for Figure in shot 2, for the whole shot."]

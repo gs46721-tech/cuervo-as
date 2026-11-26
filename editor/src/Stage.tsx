@@ -56,7 +56,7 @@ export function Stage(props: Props) {
   const episode = state.episode
   const [tab, setTab] = useState<Tab>("timeline")
   const previewing = preview !== null && preview.shot_id === shot.shot_id && preview.state === "pending" && !preview.stale
-  const duration = shot.duration_frames + (previewing ? (preview.patch?.extend_shot_frames ?? 0) : 0)
+  const duration = shot.duration_frames + (previewing ? preview.grow : 0)
   const current = Math.min(frame, duration - 1)
 
   const urlFor = useCallback(
@@ -182,9 +182,9 @@ export function Stage(props: Props) {
       </header>
 
       <div className="stage-body">
-        <Viewer url={urlFor(current)} label={`${shot.shot_id}, frame ${current}`} hasPoses={state.has_poses}>
-          <span className="badge mono">{shot.shot_id}</span>
-          <span className="badge mono">{shot.camera_preset}</span>
+        <Viewer url={urlFor(current)} label={`${shot.label}, frame ${current + 1}`} hasPoses={state.has_poses}>
+          <span className="badge">{shot.label}</span>
+          <span className="badge">{shot.size}</span>
           {soundUrl ? <span className="badge">voice</span> : null}
           {previewing && preview ? (
             <div className="preview-bar">
@@ -238,7 +238,7 @@ export function Stage(props: Props) {
             <strong>{timecode(shot.start_frame + current, episode.fps)}</strong>
             <span className="muted">
               {" "}
-              · f{current} / {duration - 1} · {shot.revision}
+              · frame {current + 1} of {duration}
             </span>
           </span>
         </div>
@@ -391,12 +391,10 @@ function ShotStrip({
           key={item.shot_id}
           className={item.shot_id === shot.shot_id ? "strip-shot selected" : "strip-shot"}
           style={{ flexGrow: item.duration_frames, backgroundImage: `url(${frameUrl(state, item.shot_id, 0)})` }}
-          title={`${item.shot_id} · ${item.camera_preset} · ${item.duration_frames} frames`}
+          title={`${item.label} · ${item.size}${item.lines[0] ? ` · “${item.lines[0].text}”` : ""}`}
           onClick={() => onSeek(item.shot_id, 0)}
         >
-          <span className="mono">
-            {index + 1} <em>{item.shot_id}</em>
-          </span>
+          <span>{index + 1}</span>
         </button>
         )
       })}
@@ -452,22 +450,22 @@ function Timeline({
   return (
     <div className="timeline">
       <div className="tl-labels">
-        <div className="tl-ruler-pad muted">{duration}f</div>
+        <div className="tl-ruler-pad muted">{(duration / fps).toFixed(1)} s</div>
         <div className="tl-label">
           <i className="dot kind-camera" />
           <span className="tl-name">
-            <span className="mono">camera</span>
-            <small>{shot.camera_preset}</small>
+            <span>Camera</span>
+            <small>{shot.size}</small>
           </span>
           <LockChip label="camera" on={shot.camera_locked} onClick={() => onCameraLock(shot)} />
         </div>
         {shot.tracks.map((track) => (
           <div className="tl-label" key={track.track_id}>
             <i className={`dot kind-${track.kind}`} />
-            <span className="tl-name" title={`${track.kind} on ${track.actor_id}`}>
-              <span className="mono">{track.track_id}</span>
+            <span className="tl-name">
+              <span>{track.who}</span>
               <small>
-                {track.kind} · {track.actor_id}
+                {track.what} · {track.pose.replace(/_/g, " ")}
               </small>
             </span>
             <LockChip label="timing" on={track.locks.includes("timing")} onClick={() => toggle(track.track_id, track.locks, "timing")} />
@@ -478,8 +476,8 @@ function Timeline({
           <div className="tl-label" key={line.track_id}>
             <i className="dot kind-dialogue" />
             <span className="tl-name" title={line.text}>
-              <span className="mono">{line.track_id}</span>
-              <small>line · {line.speaker_actor_id}</small>
+              <span>{line.speaker}</span>
+              <small>line</small>
             </span>
             <LockChip label="dialogue" on={line.locks.includes("dialogue")} onClick={() => toggle(line.track_id, line.locks, "dialogue")} />
           </div>
@@ -507,13 +505,13 @@ function Timeline({
         </div>
         <div className="tl-lane">
           <span className="bar kind-camera" style={span(0, duration)}>
-            {shot.camera_preset}
+            {shot.size}
           </span>
         </div>
         {shot.tracks.map((track) => (
           <div className="tl-lane" key={track.track_id}>
             <span className={`bar kind-${track.kind}`} style={span(track.start_frame, track.end_frame)}>
-              {track.pose}
+              {track.pose.replace(/_/g, " ")}
             </span>
           </div>
         ))}
@@ -554,8 +552,9 @@ function Script({ state, shot, onSeek }: { state: SessionState; shot: Shot; onSe
       {lines.map((line) => (
         <li key={`${line.shot_id}-${line.track_id}`}>
           <button className={line.shot_id === shot.shot_id ? "selected" : ""} onClick={() => onSeek(line.shot_id, line.start_frame)}>
-            <span className="script-meta mono">
-              {line.speaker_actor_id} <span className="muted">· {line.shot_id}</span>
+            <span className="script-meta">
+              {line.speaker}{" "}
+              <span className="muted">· {state.episode.shots.find((item) => item.shot_id === line.shot_id)?.label}</span>
             </span>
             <span>{line.text}</span>
           </button>
@@ -566,53 +565,32 @@ function Script({ state, shot, onSeek }: { state: SessionState; shot: Shot; onSe
 }
 
 function Details({ state, shot }: { state: SessionState; shot: Shot }) {
-  const names = new Map(state.episode.characters.map((item) => [item.asset_id, item.display_name]))
   const scene = state.episode.scenes.find((item) => item.scene_id === shot.scene_id)
+  const set = state.episode.backgrounds.find((item) => shot.assets.some((asset) => asset.asset_id === item.asset_id))
+  const fps = state.episode.fps
   return (
     <dl className="details">
       <dt>Scene</dt>
       <dd>
-        {scene?.title ?? shot.scene_id}
+        {scene?.title ?? "Scene"}
         {scene ? <small>{scene.objective}</small> : null}
       </dd>
+      <dt>Set</dt>
+      <dd>{set?.display_name ?? "Not set"}</dd>
       <dt>Framing</dt>
       <dd>
-        {shot.framing}
-        <small className="mono">
-          {shot.camera_preset} · x {shot.camera_x} · y {shot.camera_y}
-        </small>
+        {shot.size}
+        <small>{shot.framing}</small>
       </dd>
       <dt>Length</dt>
-      <dd className="mono">
-        {shot.duration_frames} frames · starts at f{shot.start_frame}
-      </dd>
-      <dt>Revision</dt>
       <dd>
-        <span className="mono">{shot.revision}</span>
-        <small>{shot.note}</small>
+        {(shot.duration_frames / fps).toFixed(1)} seconds
+        <small>{shot.duration_frames} frames</small>
       </dd>
-      <dt>Cast</dt>
-      <dd>
-        {shot.actors.map((actor) => (
-          <span key={actor.actor_id} className="detail-line">
-            {names.get(actor.character_id) ?? actor.character_id}
-            <small className="mono">
-              {actor.actor_id} · {actor.facing}
-            </small>
-          </span>
-        ))}
-      </dd>
-      <dt>Assets</dt>
-      <dd>
-        {shot.assets.map((asset) => (
-          <span key={`${asset.role}-${asset.asset_id}`} className="detail-line mono">
-            {asset.asset_id}
-            <small>
-              {asset.role} · {asset.version}
-            </small>
-          </span>
-        ))}
-      </dd>
+      <dt>On stage</dt>
+      <dd>{shot.actors.map((actor) => actor.name).join(", ")}</dd>
+      <dt>Last note</dt>
+      <dd>{shot.note}</dd>
     </dl>
   )
 }

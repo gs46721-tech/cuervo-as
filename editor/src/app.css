@@ -866,6 +866,14 @@ ul {
   color: var(--muted);
 }
 
+.what {
+  padding: 2px 12px 12px 30px;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .change > .note {
   margin: 0 12px 12px;
 }

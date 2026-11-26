@@ -16,7 +16,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from cuervo_ir.models import Episode, LockProperty
-from cuervo_edit.edits import EditPatch, affected, apply_edit
+from cuervo_edit import cues as cue_language
+from cuervo_edit.cues import CueContext, CueError
 
 
 class EditorError(ValueError):
@@ -35,9 +36,12 @@ class Change(BaseModel):
     shot_id: str
     instruction: str
     status: ChangeStatus = "pending"
-    patch: dict | None = None
-    diff: list[dict] = Field(default_factory=list)
-    affected: list[str] = Field(default_factory=list)
+    # The cues that make this change, and the sentences the page shows for them.
+    cues: list[str] = Field(default_factory=list)
+    summary: list[str] = Field(default_factory=list)
+    base_revision: str | None = None
+    # Frames the shot grows by, so a preview knows how long to play.
+    grow: int = 0
     provider: str | None = None
     model: str | None = None
     error: str | None = None
@@ -266,12 +270,13 @@ def change_view(session: Session, change: Change) -> dict:
     stale = False
     if change.status == "applied" and (change.snapshot_index or 0) > len(session.past):
         state = "undone"
-    if change.status == "pending" and change.patch is not None:
+    if change.status == "pending" and change.cues:
         try:
-            current = _find(session.episode, change.shot_id).provenance.revision
-            stale = current != change.patch.get("base_revision")
+            stale = _find(session.episode, change.shot_id).provenance.revision != change.base_revision
         except EditorError:
             stale = True
+    # The page shows sentences. Cues stay on the server.
+    del data["cues"]
     data["state"] = state
     data["stale"] = stale
     return data
@@ -296,6 +301,16 @@ def summarize(episode: Episode) -> dict:
         for shot in scene.shots:
             summary = _shot_summary(shot)
             summary["start_frame"] += offset
+            summary["number"] = len(shots) + 1
+            summary["label"] = f"Shot {len(shots) + 1}"
+            summary["size"] = cue_language.PRESET_WORDS[shot.camera.preset].capitalize()
+            for actor in summary["actors"]:
+                actor["name"] = cue_language.actor_name(episode, shot, actor["actor_id"])
+            for track, source in zip(summary["tracks"], shot.action_tracks):
+                track["who"] = cue_language.actor_name(episode, shot, source.target_actor_id)
+                track["what"] = cue_language.KIND_WORDS.get(source.kind, source.kind)
+            for line in summary["lines"]:
+                line["speaker"] = cue_language.actor_name(episode, shot, line["speaker_actor_id"])
             shots.append(summary)
         offset += length
     return {
@@ -374,49 +389,6 @@ def _shot_summary(shot) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Diffs
-
-
-def diff_rows(before: Episode, after: Episode, shot_id: str) -> list[dict]:
-    """What a patch would change, as `{target, field, before, after}` rows."""
-
-    previous = _find(before, shot_id)
-    revised = _find(after, shot_id)
-    rows: list[dict] = []
-
-    def row(target: str, name: str, old, new) -> None:
-        if old != new:
-            rows.append({"target": target, "field": name, "before": str(old), "after": str(new)})
-
-    row(shot_id, "duration", f"{previous.duration_frames}f", f"{revised.duration_frames}f")
-    row("camera", "preset", previous.camera.preset, revised.camera.preset)
-    row("camera", "x", _number(previous.camera.transform.x), _number(revised.camera.transform.x))
-    row("camera", "y", _number(previous.camera.transform.y), _number(revised.camera.transform.y))
-    before_tracks = {track.track_id: track for track in previous.action_tracks}
-    for track in revised.action_tracks:
-        old = before_tracks.get(track.track_id)
-        if old is None:
-            continue
-        row(track.track_id, "pose", old.keyframes[0].pose, track.keyframes[0].pose)
-        row(
-            track.track_id,
-            "frames",
-            f"{old.start_frame}–{old.end_frame}",
-            f"{track.start_frame}–{track.end_frame}",
-        )
-    starts = {shot.shot_id: shot.start_frame for scene in before.scenes for shot in scene.shots}
-    for scene in after.scenes:
-        for shot in scene.shots:
-            if shot.shot_id != shot_id and shot.shot_id in starts:
-                row(shot.shot_id, "start", f"f{starts[shot.shot_id]}", f"f{shot.start_frame}")
-    return rows
-
-
-def _number(value: float) -> str:
-    return f"{value:g}"
-
-
-# ---------------------------------------------------------------------------
 # History
 
 
@@ -477,27 +449,35 @@ def redo(session: Session) -> None:
     session.version += 1
 
 
-def dry_apply(session: Session, patch: EditPatch) -> tuple[Episode, list[dict]]:
+def cue_context(session: Session) -> CueContext:
+    from cuervo_voice.synth import default_synths
+
+    takes = Path(session.takes_dir) if session.takes_dir else None
+    return CueContext(poses=session.poses, takes_dir=takes, engines=default_synths() if takes else None)
+
+
+def apply_cues(session: Session, episode: Episode, lines: list[str]) -> tuple[Episode, list[str]]:
     try:
-        revised = apply_edit(session.episode, patch)
-    except Exception as exc:
+        return cue_language.run(episode, cue_language.parse("\n".join(lines)), cue_context(session))
+    except CueError as exc:
         raise EditorError(str(exc)) from exc
-    return revised, diff_rows(session.episode, revised, patch.target_shot_id)
 
 
-def stage_change(session: Session, change: Change, patch: EditPatch) -> None:
-    """Record a patch on a change after checking that it applies. Nothing is written yet."""
+def preview_change(session: Session, change: Change) -> Episode:
+    """The episode as it would be with a waiting change applied."""
 
-    _revised, rows = dry_apply(session, patch)
-    change.patch = patch.model_dump(mode="json")
-    change.diff = rows
-    change.affected = sorted(affected(patch))
+    if change.status != "pending" or not change.cues:
+        raise EditorError("this change is not waiting for review")
+    return apply_cues(session, session.episode, change.cues)[0]
 
 
 def accept_change(session: Session, change: Change) -> None:
-    if change.status != "pending" or change.patch is None:
+    if change.status != "pending" or not change.cues:
         raise EditorError("this change is not waiting for review")
-    revised, _rows = dry_apply(session, EditPatch.model_validate(change.patch))
+    current = _find(session.episode, change.shot_id).provenance.revision
+    if current != change.base_revision:
+        raise EditorError("This shot changed after the change was drafted. Ask again.")
+    revised, _sentences = apply_cues(session, session.episode, change.cues)
     snapshot_push(session, revised)
     change.status = "applied"
     change.snapshot_index = len(session.past)

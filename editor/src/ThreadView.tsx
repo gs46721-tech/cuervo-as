@@ -29,10 +29,10 @@ type Props = {
 }
 
 const STARTERS = [
-  "Hold the last beat 12 more frames",
-  "Cut to a close up on this shot",
-  "Set the expression to react on this shot",
-  "How long is this episode?",
+  "Hold on this shot half a second longer",
+  "Go to a close-up here",
+  "Give her a shrug on this line",
+  "How long does the episode run?",
 ]
 
 export function ThreadView(props: Props) {
@@ -76,8 +76,8 @@ export function ThreadView(props: Props) {
           <div className="column hero">
             <h1>What should change?</h1>
             <p className="muted">
-              Give a direction for <strong>{state.episode.title}</strong>. The agent picks the shots, drafts typed
-              patches, and shows you each one before anything is written.
+              Give a note on <strong>{state.episode.title}</strong>, the way you would to an editor in the room. Your
+              crew finds the shots, makes the change, and shows it to you before it goes in the cut.
             </p>
             <div className="starters">
               {STARTERS.map((text) => (
@@ -122,8 +122,8 @@ function TurnBlock(props: Props & { turn: Turn; onRetry: (change: Change) => voi
           {turn.shot_ids.length ? (
             <div className="chips">
               {turn.shot_ids.map((shotId) => (
-                <button key={shotId} className="chip mono" onClick={() => props.onJump(shotId)}>
-                  @{shotId}
+                <button key={shotId} className="chip" onClick={() => props.onJump(shotId)}>
+                  {state.episode.shots.find((item) => item.shot_id === shotId)?.label ?? "A removed shot"}
                 </button>
               ))}
             </div>
@@ -212,9 +212,9 @@ function TurnBlock(props: Props & { turn: Turn; onRetry: (change: Change) => voi
                 {icons.revert} Revert to before this turn
               </button>
             ) : null}
-            <span className="muted mono spacer">
+            <span className="muted spacer">
               {sources.join(", ")}
-              {turn.mode === "auto" ? " · auto-apply" : ""}
+              {turn.mode === "auto" ? " · applied right away" : ""}
             </span>
           </footer>
         ) : null}
@@ -252,44 +252,33 @@ function ChangeCard({
   const shot = state.episode.shots.find((item) => item.shot_id === change.shot_id)
   const reviewable = change.state === "pending" && !change.stale
   const label = change.state === "pending" && change.stale ? "Out of date" : STATE_LABEL[change.state]
-  // A timing change shows at the end of the shot. Anything else reads fine mid-shot.
-  const retimed = change.diff.some((row) => row.field === "frames" || row.field === "duration")
+  // A change of length shows at the end of the shot. Anything else reads fine mid-shot.
   const length = shot?.duration_frames ?? 1
-  const sample = retimed ? length - 1 : Math.floor(length / 2)
-  const after = retimed ? length + (change.patch?.extend_shot_frames ?? 0) - 1 : sample
+  const sample = change.grow ? length - 1 : Math.floor(length / 2)
+  const after = change.grow ? Math.max(0, length + change.grow - 1) : sample
 
   return (
     <article className={`change ${change.state}${change.stale ? " stale" : ""}${previewing ? " previewing" : ""}`}>
       <header>
-        <button className="chip mono" onClick={onJump} title="Show this shot on the stage">
-          {icons.film} {change.shot_id}
+        <button className="chip" onClick={onJump} title="Show this shot on the stage" disabled={!shot}>
+          {icons.film} {shot?.label ?? "Removed shot"}
         </button>
-        <span className="change-text">{change.instruction}</span>
+        <span className="change-text">{shot ? shot.size : ""}</span>
         <span className={`status ${change.stale ? "stale" : change.state}`}>{label}</span>
       </header>
 
-      {change.diff.length ? (
-        <table className="diff">
-          <tbody>
-            {change.diff.map((row) => (
-              <tr key={`${row.target}.${row.field}`}>
-                <th className="mono">
-                  {row.target}
-                  <span className="muted">.{row.field}</span>
-                </th>
-                <td className="mono old">{row.before}</td>
-                <td className="arrow">→</td>
-                <td className="mono new">{row.after}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {change.summary.length ? (
+        <ul className="what">
+          {change.summary.map((sentence, index) => (
+            <li key={index}>{sentence}</li>
+          ))}
+        </ul>
       ) : null}
 
       {change.error ? <p className="note error">{change.error}</p> : null}
       {change.state === "pending" && change.stale ? (
         <p className="note">
-          {change.shot_id} changed after this was drafted, so it can no longer be applied.{" "}
+          This shot changed after the draft was made, so the draft no longer fits.{" "}
           <button className="link" onClick={onRetry}>
             Ask again
           </button>
@@ -299,12 +288,12 @@ function ChangeCard({
       {reviewable && shot ? (
         <div className="compare">
           <figure>
-            <img src={frameUrl(state, shot.shot_id, sample)} alt={`${shot.shot_id} now, frame ${sample}`} loading="lazy" />
-            <figcaption>Now · f{sample}</figcaption>
+            <img src={frameUrl(state, shot.shot_id, sample)} alt={`${shot.label} as it is now`} loading="lazy" />
+            <figcaption>Now</figcaption>
           </figure>
           <figure>
-            <img src={changeFrameUrl(state, change.change_id, after)} alt={`${shot.shot_id} proposed, frame ${after}`} loading="lazy" />
-            <figcaption>Proposed · f{after}</figcaption>
+            <img src={changeFrameUrl(state, change.change_id, after)} alt={`${shot.label} with the change`} loading="lazy" />
+            <figcaption>Proposed</figcaption>
           </figure>
         </div>
       ) : null}
@@ -374,14 +363,21 @@ function Composer({
   const usable = known.filter((item) => item.available)
   const chosen = provider && usable.some((item) => item.name === provider) ? provider : null
   const first = (step: string) => providers?.routes[step]?.find((name) => usable.some((item) => item.name === name))
-  const route = first("ir_patch")
+  const route = first("editor_assist")
 
   const matches = useMemo(() => {
     if (!menu) {
       return []
     }
+    // Find a shot by its number, its size, or a word from its first line.
     const query = menu.query.toLowerCase()
-    return state.episode.shots.filter((item) => !shots.includes(item.shot_id) && item.shot_id.toLowerCase().includes(query)).slice(0, 8)
+    return state.episode.shots
+      .filter((item) => !shots.includes(item.shot_id))
+      .filter((item) => {
+        const text = `${item.number} ${item.label} ${item.size} ${item.lines[0]?.text ?? ""}`.toLowerCase()
+        return query === "" ? true : /^\d+$/.test(query) ? String(item.number).startsWith(query) : text.includes(query)
+      })
+      .slice(0, 8)
   }, [menu, state.episode.shots, shots])
 
   const pick = (shotId: string) => {
@@ -414,9 +410,9 @@ function Composer({
         {shots.length ? (
           <div className="chips">
             {shots.map((shotId) => (
-              <span key={shotId} className="chip mono">
-                @{shotId}
-                <button type="button" aria-label={`Remove ${shotId}`} onClick={() => setShots(shots.filter((item) => item !== shotId))}>
+              <span key={shotId} className="chip">
+                {state.episode.shots.find((item) => item.shot_id === shotId)?.label ?? "Shot"}
+                <button type="button" aria-label="Unpin this shot" onClick={() => setShots(shots.filter((item) => item !== shotId))}>
                   {icons.close}
                 </button>
               </span>
@@ -437,10 +433,10 @@ function Composer({
                     pick(item.shot_id)
                   }}
                 >
-                  <span className="mono">@{item.shot_id}</span>
-                  <span className="muted">
-                    {item.camera_preset} · {item.duration_frames}f
+                  <span>
+                    {item.label} · {item.size}
                   </span>
+                  <span className="muted clip">{item.lines[0] ? `“${item.lines[0].text}”` : "No dialogue"}</span>
                 </button>
               </li>
             ))}
@@ -452,7 +448,7 @@ function Composer({
           value={text}
           aria-label="Direction"
           placeholder={
-            shots.length ? "Describe the change for the pinned shots" : "Describe a change. Type @ to pin it to a shot."
+            shots.length ? "Give your note for the pinned shots" : "Give a note. Type @ to pin it to a shot."
           }
           onChange={(event) => {
             const value = event.target.value
@@ -535,7 +531,7 @@ function Composer({
           {focus && !shots.includes(focus.shot_id) ? (
             <button type="button" className="btn small ghost" title="Limit this direction to the shot on the stage" onClick={() => pick(focus.shot_id)}>
               {icons.at}
-              <span className="mono">{focus.shot_id}</span>
+              <span>{focus.label}</span>
             </button>
           ) : null}
           <span className="spacer" />
@@ -559,7 +555,7 @@ function Composer({
         </p>
       ) : (
         <p className="composer-hint">
-          {shots.length ? "Pinned shots get this direction as written." : "No shot pinned: the agent decides which shots change."}{" "}
+          {shots.length ? "Only the pinned shots will change." : "No shot pinned: your crew works out which shots the note is about."}{" "}
           Enter to send · Shift+Enter for a new line
         </p>
       )}

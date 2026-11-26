@@ -4,6 +4,9 @@ export type Track = {
   track_id: string
   kind: string
   actor_id: string
+  /** The character's name, and what this track is in plain words. */
+  who: string
+  what: string
   start_frame: number
   end_frame: number
   pose: string
@@ -13,6 +16,7 @@ export type Track = {
 export type Line = {
   track_id: string
   speaker_actor_id: string
+  speaker: string
   text: string
   start_frame: number
   end_frame: number
@@ -22,6 +26,10 @@ export type Line = {
 export type Shot = {
   shot_id: string
   scene_id: string
+  /** Position in the episode, and the names the page shows: "Shot 12", "Close-up". */
+  number: number
+  label: string
+  size: string
   start_frame: number
   duration_frames: number
   revision: string
@@ -32,7 +40,7 @@ export type Shot = {
   camera_locked: boolean
   has_voice: boolean
   framing: string
-  actors: { actor_id: string; character_id: string; facing: string }[]
+  actors: { actor_id: string; character_id: string; facing: string; name: string }[]
   assets: { role: string; asset_id: string; version: string }[]
   tracks: Track[]
   lines: Line[]
@@ -51,8 +59,6 @@ export type EpisodeView = {
   lines: (Line & { shot_id: string })[]
 }
 
-export type DiffRow = { target: string; field: string; before: string; after: string }
-
 export type ChangeState = "pending" | "applied" | "undone" | "rejected" | "failed" | "discarded"
 
 export type Change = {
@@ -61,9 +67,9 @@ export type Change = {
   instruction: string
   state: ChangeState
   stale: boolean
-  patch: { extend_shot_frames?: number } | null
-  diff: DiffRow[]
-  affected: string[]
+  /** What the change does, one sentence each. */
+  summary: string[]
+  grow: number
   provider: string | null
   model: string | null
   error: string | null

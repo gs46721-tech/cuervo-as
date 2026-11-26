@@ -2,7 +2,7 @@
 
 A chat-first authoring UI for whatever episode you open. It does not load a built-in show.
 
-You give a direction in plain words. An agent turns it into typed patches, one per shot. Each patch shows as a diff and a before and after frame. Nothing is written to the episode until you accept it.
+You work as the director, the editor, and the writer. You give a note in plain words. An agent carries it out and shows you each change as a sentence and a before and after frame. Nothing goes in the cut until you accept it. The page never shows code.
 
 ## Run it
 
@@ -35,12 +35,14 @@ A project is one episode with its edit history. A thread is one conversation abo
 
 ## A turn
 
-1. If you pinned shots with `@`, each pinned shot gets the direction as written.
-2. Otherwise the `editor_assist` route reads the episode and returns a reply and one instruction per shot it wants to change. A question gets a reply and no edits.
-3. The `ir_patch` route drafts one `edit_patch` per shot. See [edits.md](edits.md) for what a patch may do.
-4. Each patch is dry-applied. One that breaks a lock or the schema is marked failed on its card and the rest continue.
+The person gives a note in plain words. The agent carries it out by writing cues, the command line of the animation. See [edits.md](edits.md). The page never shows a cue, an id, or a patch. It shows sentences: "Reframe shot 4 from a two-shot to a close-up."
 
-The composer chooses the provider and the mode. **Auto** follows the route order in [providers.md](providers.md). **Review** leaves every change waiting for Accept or Reject. **Auto-apply** writes them as soon as they are drafted.
+1. The agent is handed the note, the shot on screen, and that scene's shot list.
+2. Each round it sends cues through the `editor_assist` route. Read cues (`scenes`, `shots`, `show`, `find`) come back with what they print. Edit cues run on a working copy. A cue that fails comes back as an error the agent can fix.
+3. It ends with `done` and a short message to the director. A question gets that message and no change.
+4. The edits that held are staged as one change per shot, each with its sentences.
+
+Shots pinned with `@` are the only shots that turn may change. The composer chooses the provider and the mode. **Review** leaves every change waiting for Accept or Reject. **Auto-apply** writes them as soon as they are drafted.
 
 ## Review, undo, and locks
 

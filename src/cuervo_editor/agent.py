@@ -1,7 +1,10 @@
-"""One agent turn: decide which shots a direction touches, then draft a typed patch per shot.
+"""One agent turn. The agent works the episode by writing cues, like a person at a command line.
 
-The agent never writes the episode on its own in review mode. It stages
-changes on the turn and the person accepts or rejects each one.
+Each round it sends cues. Read cues come back with what they show. Edit cues
+run against a working copy, and an edit that fails comes back as an error the
+agent can fix. Nothing touches the real episode: the edits that held are
+staged, one change per shot, with a sentence for each. The page shows those
+sentences. It never shows a cue.
 """
 
 from __future__ import annotations
@@ -9,11 +12,10 @@ from __future__ import annotations
 import json
 import time
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from cuervo_ir.models import Episode
 from cuervo_ir.providers.router import ModelRequest, ProviderError, ProviderRouter
-from cuervo_edit.propose import _strip_fence, request_edit
+from cuervo_edit import cues as cue_language
+from cuervo_edit.cues import Cue, CueError
 from cuervo_editor.store import (
     Change,
     EditorError,
@@ -23,124 +25,31 @@ from cuervo_editor.store import (
     Thread,
     Turn,
     accept_change,
+    cue_context,
     new_id,
-    stage_change,
-    summarize,
 )
 
-PLAN_SYSTEM = (
-    "You assist a director in a 2D animation editor. Read the direction and the episode. "
-    "Decide which shots it applies to and write one concrete instruction per shot. Each "
-    "instruction may change timing, the pose on an existing track, or the camera of that "
-    "shot. Nothing else can be edited. If the direction is a question, or needs no edit, "
-    "answer it in `reply` and return no edits. Never invent shot ids. A long episode lists only the "
-    "current scene in full. `other_scenes` names the rest, and their shot ids are valid targets. Return only JSON: "
-    '{"reply": string, "edits": [{"shot_id": string, "instruction": string}]}. '
-    "`reply` is one or two plain sentences for the director."
+MAX_ROUNDS = 6
+
+SYSTEM = (
+    "You are the crew of a 2D animation studio. A director gives you a note about an episode and you carry "
+    "it out by typing cues into the studio's command line. Reply with cues only, one per line, and nothing "
+    "else.\n\n"
+    + cue_language.__doc__.split("\n\n", 1)[1]
+    + "\n"
+    "Frames in a shot start at 0. Use ids exactly as `show` prints them. Look before you change: `show` a "
+    "shot before editing it unless it was already shown to you. A track or camera marked LOCKED cannot be "
+    "changed, so do not try. Change only what the note asks for. If the director pinned shots, change only "
+    "those. If a cue comes back with an error, fix it or leave it. If the note is a question, answer it in "
+    "`done` and change nothing.\n\n"
+    "End your last reply with `done \"...\"`: one or two plain sentences to the director about what you did "
+    "or found. Speak as a colleague. Never mention cues, ids, tracks, or frames by number in that message; "
+    "say shot numbers, character names, and seconds."
 )
-
-
-LARGE_EPISODE_SHOTS = 60
-
-
-class PlannedEdit(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    shot_id: str
-    instruction: str = Field(min_length=1)
-
-
-class TurnPlan(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    reply: str = ""
-    edits: list[PlannedEdit] = Field(default_factory=list)
 
 
 class Stopped(Exception):
     pass
-
-
-def plan_turn(
-    episode: Episode,
-    thread: Thread,
-    turn: Turn,
-    router: ProviderRouter,
-) -> tuple[TurnPlan, str]:
-    """Ask the `editor_assist` route where the direction lands. Returns the plan and who wrote it."""
-
-    view = summarize(episode)
-    shots = view["shots"]
-    elsewhere: list[dict] = []
-    if len(shots) > LARGE_EPISODE_SHOTS:
-        # A full episode does not fit in one request. Send the scene on screen in full and the rest as an index.
-        focus = next((shot["scene_id"] for shot in shots if shot["shot_id"] == turn.focus_shot_id), shots[0]["scene_id"])
-        elsewhere = [
-            {
-                "scene_id": scene["scene_id"],
-                "title": scene["title"],
-                "shot_ids": [shot["shot_id"] for shot in shots if shot["scene_id"] == scene["scene_id"]],
-            }
-            for scene in view["scenes"]
-            if scene["scene_id"] != focus
-        ]
-        shots = [shot for shot in shots if shot["scene_id"] == focus]
-    history = [
-        {"direction": earlier.instruction, "reply": earlier.reply}
-        for earlier in thread.turns[-6:]
-        if earlier.turn_id != turn.turn_id
-    ]
-    response = router.complete(
-        ModelRequest(
-            step="editor_assist",
-            system=PLAN_SYSTEM,
-            user=json.dumps(
-                {
-                    "instruction": turn.instruction,
-                    "focus_shot_id": turn.focus_shot_id,
-                    "history": history,
-                    "episode": {
-                        "title": view["title"],
-                        "fps": view["fps"],
-                        "shots": [
-                            {
-                                "shot_id": shot["shot_id"],
-                                "scene_id": shot["scene_id"],
-                                "start_frame": shot["start_frame"],
-                                "duration_frames": shot["duration_frames"],
-                                "camera_preset": shot["camera_preset"],
-                                "framing": shot["framing"],
-                                "actors": [actor["actor_id"] for actor in shot["actors"]],
-                                "tracks": shot["tracks"],
-                                "lines": [
-                                    {"speaker": line["speaker_actor_id"], "text": line["text"]}
-                                    for line in shot["lines"]
-                                ],
-                            }
-                            for shot in shots
-                        ],
-                        "other_scenes": elsewhere,
-                    },
-                }
-            ),
-            response_schema=TurnPlan.model_json_schema(),
-        ),
-        only=turn.provider,
-    )
-    try:
-        plan = TurnPlan.model_validate(json.loads(_strip_fence(response.text)))
-    except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        raise EditorError(f"{response.provider} did not return a plan") from exc
-    known = {shot["shot_id"] for shot in view["shots"]}
-    unknown = [edit.shot_id for edit in plan.edits if edit.shot_id not in known]
-    if unknown:
-        raise EditorError(f"{response.provider} planned an unknown shot: {', '.join(unknown)}")
-    # One patch per shot: a second patch would be drafted against a revision the first one replaces.
-    merged: dict[str, str] = {}
-    for edit in plan.edits:
-        merged[edit.shot_id] = f"{merged[edit.shot_id]} {edit.instruction}" if edit.shot_id in merged else edit.instruction
-    plan.edits = [PlannedEdit(shot_id=shot_id, instruction=text) for shot_id, text in merged.items()]
-    return plan, f"{response.provider} · {response.model}"
 
 
 def run_turn(session: Session, thread: Thread, turn: Turn, router: ProviderRouter, store: SessionStore) -> None:
@@ -150,60 +59,103 @@ def run_turn(session: Session, thread: Thread, turn: Turn, router: ProviderRoute
         if turn.turn_id in session.stop_requests:
             raise Stopped()
 
-    def begin(label: str, detail: str = "") -> Step:
+    def step(label: str, status: str = "done", detail: str = "") -> None:
         with session.lock:
-            step = Step(label=label, detail=detail)
-            turn.steps.append(step)
-            store.save(session)
-        return step
-
-    def end(step: Step, status: str = "done", detail: str | None = None) -> None:
-        with session.lock:
-            step.status = status  # type: ignore[assignment]
-            if detail is not None:
-                step.detail = detail
+            turn.steps.append(Step(label=label, detail=detail, status=status))  # type: ignore[arg-type]
             store.save(session)
 
     try:
-        shot_ids = [shot.shot_id for scene in session.episode.scenes for shot in scene.shots]
-        if turn.shot_ids:
-            targets = [(shot_id, turn.instruction) for shot_id in turn.shot_ids]
-        elif len(shot_ids) == 1:
-            targets = [(shot_ids[0], turn.instruction)]
-        else:
-            step = begin("Reading the episode", f"{len(shot_ids)} shots")
-            try:
-                plan, source = plan_turn(session.episode, thread, turn, router)
-            except (ProviderError, EditorError) as exc:
-                end(step, "failed", str(exc))
-                raise
-            targets = [(edit.shot_id, edit.instruction) for edit in plan.edits]
-            with session.lock:
-                turn.reply = plan.reply
-            end(step, detail=f"{source} · {_count(len(targets), 'shot')} to change")
+        with session.lock:
+            base = session.episode
+            context = cue_context(session)
+        working = base
+        pinned = set(turn.shot_ids)
+        focus = turn.focus_shot_id if _has_shot(base, turn.focus_shot_id) else None
+        focus = next(iter(turn.shot_ids), focus) or base.scenes[0].shots[0].shot_id
+        transcript: list[str] = []
+        kept: dict[str, list[tuple[Cue, str]]] = {}
+        failures: list[str] = []
+        message = ""
 
-        for shot_id, instruction in targets:
+        for round_number in range(MAX_ROUNDS):
             check()
-            step = begin(f"Drafting a patch for {shot_id}", instruction)
-            change = Change(change_id=new_id("chg"), shot_id=shot_id, instruction=instruction)
+            step("Thinking it through" if round_number == 0 else "Working on it", "running")
             try:
-                patch, response = request_edit(session.episode, shot_id, instruction, router, only=turn.provider)
-                with session.lock:
-                    change.provider = response.provider
-                    change.model = response.model
-                    stage_change(session, change, patch)
-                end(step, detail=f"{response.provider} · {response.model} · {_count(len(change.diff), 'field')}")
-            except (ProviderError, ValueError) as exc:
-                change.status = "failed"
-                change.error = str(exc)
-                end(step, "failed", str(exc))
+                response = router.complete(
+                    ModelRequest(
+                        step="editor_assist",
+                        system=SYSTEM,
+                        user=json.dumps(_brief(base, working, thread, turn, focus, transcript)),
+                    ),
+                    only=turn.provider,
+                )
+            except ProviderError as exc:
+                _finish_step(session, turn, store, "failed", _plain(str(exc)))
+                raise
             with session.lock:
-                turn.changes.append(change)
-                store.save(session)
+                turn.steps.pop()
+            try:
+                cues = cue_language.parse(response.text)
+            except CueError as exc:
+                transcript.append(f"error: {exc}")
+                continue
+            if not cues:
+                transcript.append('error: reply with cues only, and end with done "..."')
+                continue
+            finished = False
+            looked = False
+            for cue in cues:
+                check()
+                if cue.verb == "done":
+                    message = " ".join(cue.args).strip()
+                    finished = True
+                    break
+                if cue.verb in cue_language.READS:
+                    looked = True
+                    try:
+                        shown = cue_language.read(working, cue)
+                        step(_read_label(working, cue))
+                    except CueError as exc:
+                        shown = f"error: {exc}"
+                    transcript.append(f"> {cue.text}\n{shown}")
+                    continue
+                shot_id = cue.shot_id or ""
+                try:
+                    if pinned and shot_id not in pinned:
+                        raise CueError("The director pinned other shots. Change only those.")
+                    label = cue_language.shot_label(working, shot_id).capitalize()
+                    working, sentence = cue_language.apply(working, cue, context)
+                    kept.setdefault(shot_id, []).append((cue, sentence))
+                    step(sentence.rstrip("."), detail=label)
+                    transcript.append(f"> {cue.text}\nok: {sentence}")
+                except CueError as exc:
+                    failures.append(str(exc))
+                    step(str(exc).rstrip("."), "failed")
+                    transcript.append(f"> {cue.text}\nerror: {exc}")
+            if finished or not looked:
+                break
 
-        check()
-        if turn.mode == "auto":
-            with session.lock:
+        with session.lock:
+            for shot_id, items in kept.items():
+                change = Change(
+                    change_id=new_id("chg"),
+                    shot_id=shot_id,
+                    instruction=turn.instruction,
+                    cues=[cue.text for cue, _sentence in items],
+                    summary=[sentence for _cue, sentence in items],
+                    provider=response.provider,
+                    model=response.model,
+                )
+                try:
+                    before = _shot(base, shot_id)
+                    change.base_revision = before.provenance.revision
+                    after = _shot(working, shot_id) if _has_shot(working, shot_id) else None
+                    change.grow = (after.duration_frames - before.duration_frames) if after else 0
+                except EditorError as exc:
+                    change.status = "failed"
+                    change.error = str(exc)
+                turn.changes.append(change)
+            if turn.mode == "auto":
                 for change in turn.changes:
                     if change.status != "pending":
                         continue
@@ -212,20 +164,21 @@ def run_turn(session: Session, thread: Thread, turn: Turn, router: ProviderRoute
                     except EditorError as exc:
                         change.status = "failed"
                         change.error = str(exc)
-        with session.lock:
+            turn.reply = message or _summary(turn, failures)
+            if failures and not kept:
+                # Nothing held, so the crew's sign-off would be wrong. Say what stopped it.
+                turn.reply = failures[0]
             turn.status = "done"
-            if not turn.reply:
-                turn.reply = _summary(turn)
     except Stopped:
         with session.lock:
             turn.status = "stopped"
-            for step in turn.steps:
-                if step.status == "running":
-                    step.status = "failed"
+            for item in turn.steps:
+                if item.status == "running":
+                    item.status = "failed"
     except Exception as exc:  # A turn must always end, whatever the provider did.
         with session.lock:
             turn.status = "failed"
-            turn.error = str(exc)
+            turn.error = _plain(str(exc))
     finally:
         with session.lock:
             turn.finished_at = time.time()
@@ -233,19 +186,76 @@ def run_turn(session: Session, thread: Thread, turn: Turn, router: ProviderRoute
             store.save(session)
 
 
-def _summary(turn: Turn) -> str:
+def _brief(base: Episode, working: Episode, thread: Thread, turn: Turn, focus: str, transcript: list[str]) -> dict:
+    """What the agent is handed each round: the note, where the director is looking, and the session so far."""
+
+    shots = [shot for scene in base.scenes for shot in scene.shots]
+    frames = sum(shot.duration_frames for shot in shots)
+    scene = next(scene for scene in working.scenes if any(shot.shot_id == focus for shot in scene.shots)) if _has_shot(working, focus) else working.scenes[0]
+    return {
+        "note": turn.instruction,
+        "pinned_shots": turn.shot_ids,
+        "on_screen": focus,
+        "episode": {
+            "title": base.title,
+            "fps": base.fps,
+            "scenes": len(base.scenes),
+            "shots": len(shots),
+            "seconds": round(frames / base.fps, 1),
+        },
+        "earlier_notes": [
+            {"note": earlier.instruction, "reply": earlier.reply}
+            for earlier in thread.turns[-6:]
+            if earlier.turn_id != turn.turn_id
+        ],
+        # Shown up front so a simple note takes one round.
+        "current_scene": cue_language.read(working, Cue("shots", [scene.scene_id])),
+        "current_shot": cue_language.describe(working, focus) if _has_shot(working, focus) else "",
+        "session": "\n".join(transcript),
+    }
+
+
+def _read_label(episode: Episode, cue: Cue) -> str:
+    if cue.verb == "show" and cue.args:
+        return f"Looked at {cue_language.shot_label(episode, cue.args[0])}"
+    if cue.verb == "find":
+        return f'Searched the script for "{" ".join(cue.args)}"'
+    if cue.verb == "shots":
+        return "Looked through a scene"
+    return "Looked over the episode"
+
+
+def _summary(turn: Turn, failures: list[str]) -> str:
     drafted = [change for change in turn.changes if change.status in ("pending", "applied")]
-    failed = [change for change in turn.changes if change.status == "failed"]
-    if not turn.changes:
-        return "Nothing to change."
-    parts = []
-    if drafted:
-        verb = "Applied" if turn.mode == "auto" else "Drafted"
-        parts.append(f"{verb} {_count(len(drafted), 'change')} on {', '.join(change.shot_id for change in drafted)}.")
-    if failed:
-        parts.append(f"{_count(len(failed), 'shot')} could not be changed.")
-    return " ".join(parts)
+    if not drafted:
+        return failures[0] if failures else "Nothing to change."
+    count = sum(len(change.summary) for change in drafted)
+    verb = "Made" if turn.mode == "auto" else "Drafted"
+    shots = "one shot" if len(drafted) == 1 else f"{len(drafted)} shots"
+    return f"{verb} {count} {'change' if count == 1 else 'changes'} across {shots}."
 
 
-def _count(number: int, noun: str) -> str:
-    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+def _plain(error: str) -> str:
+    if "no provider completed" in error:
+        return "No model account answered. Connect one in Accounts and keys."
+    return error
+
+
+def _finish_step(session: Session, turn: Turn, store: SessionStore, status: str, detail: str) -> None:
+    with session.lock:
+        if turn.steps:
+            turn.steps[-1].status = status  # type: ignore[assignment]
+            turn.steps[-1].detail = detail
+        store.save(session)
+
+
+def _has_shot(episode: Episode, shot_id: str | None) -> bool:
+    return any(shot.shot_id == shot_id for scene in episode.scenes for shot in scene.shots)
+
+
+def _shot(episode: Episode, shot_id: str):
+    for scene in episode.scenes:
+        for shot in scene.shots:
+            if shot.shot_id == shot_id:
+                return shot
+    raise EditorError(f"unknown shot {shot_id}")

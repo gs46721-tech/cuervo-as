@@ -331,7 +331,7 @@ export function App() {
       } else if (rows[0]) {
         await run(api.lock(state.session_id, target.shot_id, rows[0].track_id, [...rows[0].locks, "camera"]))
       } else {
-        say("This shot has no track to hold a camera lock.")
+        say("There is nothing in this shot to pin the camera to.")
       }
     },
     [state, run, say],
@@ -430,7 +430,7 @@ export function App() {
       list.push({
         id: `shot:${item.shot_id}`,
         group: "Shots",
-        label: `${item.shot_id} · ${item.camera_preset} · ${item.duration_frames}f`,
+        label: `${item.label} · ${item.size}${item.lines[0] ? ` · “${item.lines[0].text}”` : ""}`,
         run: () => {
           setStageOpen(true)
           seek(item.shot_id, 0)
