@@ -28,6 +28,7 @@ from cuervo_pipeline.run import shot_audio
 from cuervo_voice.takes import SAMPLE_RATE
 from cuervo_world import World, WorldError
 from cuervo_world.imagegen import default_engines
+from cuervo_editor import studio
 from cuervo_editor.agent import run_turn
 from cuervo_editor.store import (
     EditorError,
@@ -492,6 +493,8 @@ def create_app(
             ),
         )
         return state(session)
+
+    studio.install(app, session_of=lambda session_id: _session(app, session_id), state_of=state, background=background)
 
     built = dist if dist is not None else _default_dist()
     if built is not None and (built / "index.html").is_file():

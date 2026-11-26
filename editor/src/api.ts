@@ -126,6 +126,10 @@ export type ServiceKey = {
   name: string
   label: string
   role: string
+  /** "local" is an agent signed in on this computer. "key" is an account with an API key. */
+  kind: "local" | "key"
+  version?: string
+  login_hint?: string
   connected: boolean
   key_hint: string
   key_source: "" | "saved" | "environment"

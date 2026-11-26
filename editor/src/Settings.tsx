@@ -48,16 +48,37 @@ export function Settings({ onClose, onChanged }: { onClose: () => void; onChange
           </p>
           {error ? <p className="note error">{error}</p> : null}
           {services === null && !error ? <Spinner /> : null}
-          {services?.map((service) => (
-            <ServiceCard
-              key={service.name}
-              service={service}
-              onSaved={(next) => {
-                setServices(next)
-                onChanged()
-              }}
-            />
-          ))}
+          {services ? <h3 className="settings-group">On this computer</h3> : null}
+          {services ? (
+            <p className="muted">
+              Agents you already use. They work through the account you are signed in to, so there is no key to paste.
+            </p>
+          ) : null}
+          {services
+            ?.filter((service) => service.kind === "local")
+            .map((service) => (
+              <LocalCard
+                key={service.name}
+                service={service}
+                onSaved={(next) => {
+                  setServices(next)
+                  onChanged()
+                }}
+              />
+            ))}
+          {services ? <h3 className="settings-group">With an API key</h3> : null}
+          {services
+            ?.filter((service) => service.kind !== "local")
+            .map((service) => (
+              <ServiceCard
+                key={service.name}
+                service={service}
+                onSaved={(next) => {
+                  setServices(next)
+                  onChanged()
+                }}
+              />
+            ))}
         </div>
       </div>
     </div>
@@ -184,6 +205,73 @@ function ServiceCard({ service, onSaved }: { service: ServiceKey; onSaved: (serv
   )
 }
 
+
+function LocalCard({ service, onSaved }: { service: ServiceKey; onSaved: (services: ServiceKey[]) => void }) {
+  const [model, setModel] = useState(service.model)
+  const [path, setPath] = useState(service.base_url)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<KeyCheck | null>(null)
+  const dirty = model !== service.model || path !== service.base_url
+
+  const test = () => {
+    setBusy(true)
+    setResult(null)
+    api
+      .testKey(service.name)
+      .then(setResult)
+      .catch((reason: Error) => setResult({ ok: false, message: reason.message }))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <form
+      className="service"
+      onSubmit={(event) => {
+        event.preventDefault()
+        setBusy(true)
+        setResult(null)
+        api
+          .saveKey(service.name, { model, base_url: path })
+          .then((body) => onSaved(body.services))
+          .catch((reason: Error) => setResult({ ok: false, message: reason.message }))
+          .finally(() => setBusy(false))
+      }}
+    >
+      <div className="service-head">
+        <div>
+          <strong>{service.label}</strong>
+          <span className="muted">
+            {service.connected ? `Found: ${service.version || "installed"}` : "Not found on this computer."}
+          </span>
+        </div>
+        <span className={service.connected ? "status applied" : "status"}>{service.connected ? "Installed" : "Not installed"}</span>
+      </div>
+      <label>
+        <span>Model</span>
+        <input value={model} placeholder="The agent's own default" spellCheck={false} onChange={(event) => setModel(event.target.value)} />
+      </label>
+      <label>
+        <span>Program</span>
+        <input value={path} placeholder="Found automatically. Set a path if it is not." spellCheck={false} onChange={(event) => setPath(event.target.value)} />
+      </label>
+      <div className="service-foot">
+        <button type="submit" className="btn small primary" disabled={busy || !dirty}>
+          Save
+        </button>
+        <button type="button" className="btn small" disabled={busy || !service.connected} title="Sends one short real request" onClick={test}>
+          {busy ? <Spinner /> : null} Test
+        </button>
+        {!service.connected && service.key_url ? (
+          <a className="link spacer" href={service.key_url} target="_blank" rel="noreferrer">
+            Get {service.label}
+          </a>
+        ) : null}
+      </div>
+      {result ? <p className={result.ok ? "note ok" : "note error"}>{result.message}</p> : null}
+      {!result && service.connected ? <p className="muted">If the test says it is not signed in: {service.login_hint}</p> : null}
+    </form>
+  )
+}
 
 /** Pick the models for each job, and whether they take turns or compete. */
 function Roles({ services, onChanged }: { services: ServiceKey[]; onChanged: () => void }) {

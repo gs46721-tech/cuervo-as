@@ -94,6 +94,10 @@ class Session:
         self.takes_dir: str | None = None
         # Folder of approved art. Without it the preview draws plain shapes.
         self.world_dir: str | None = None
+        # Where this episode's renders and takes are kept, when it was started in the editor.
+        self.build_dir: str | None = None
+        # Scenes whose storyboard the director has signed off.
+        self.approved_scenes: set[str] = set()
         self.past: list[dict] = []
         self.future: list[dict] = []
         # Goes up every time the episode changes, so a frame URL can be cached.
@@ -137,6 +141,8 @@ class Session:
             "poses": self.poses,
             "takes_dir": self.takes_dir,
             "world_dir": self.world_dir,
+            "build_dir": self.build_dir,
+            "approved_scenes": sorted(self.approved_scenes),
             "past": self.past,
             "future": self.future,
             "version": self.version,
@@ -150,6 +156,8 @@ class Session:
         session.updated_at = data.get("updated_at", session.created_at)
         session.takes_dir = data.get("takes_dir")
         session.world_dir = data.get("world_dir")
+        session.build_dir = data.get("build_dir")
+        session.approved_scenes = set(data.get("approved_scenes", []))
         session.past = list(data.get("past", []))
         session.future = list(data.get("future", []))
         session.version = int(data.get("version", 0))
@@ -228,6 +236,8 @@ def session_view(session: Session) -> dict:
         "has_poses": bool(session.poses),
         "has_takes": bool(session.takes_dir),
         "has_world": bool(session.world_dir),
+        "approved_scenes": sorted(session.approved_scenes),
+        "rendered": bool(session.build_dir) and (Path(session.build_dir) / "episode.mp4").is_file(),
         "version": session.version,
         "undo": len(session.past),
         "redo": len(session.future),

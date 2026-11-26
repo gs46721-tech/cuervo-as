@@ -132,9 +132,12 @@ def run_turn(session: Session, thread: Thread, turn: Turn, router: ProviderRoute
                     step(sentence.rstrip("."), detail=label)
                     transcript.append(f"> {cue.text}\nok: {sentence}")
                 except CueError as exc:
+                    transcript.append(f"> {cue.text}\nerror: {exc}")
+                    if " already " in str(exc):
+                        # Asking for what is already so is not a failure the director needs to see.
+                        continue
                     failures.append(str(exc))
                     step(str(exc).rstrip("."), "failed")
-                    transcript.append(f"> {cue.text}\nerror: {exc}")
             if finished or not looked:
                 break
 

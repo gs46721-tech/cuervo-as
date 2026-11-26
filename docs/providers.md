@@ -32,6 +32,27 @@ Cursor has no assumed host. Set `CURSOR_API_BASE` to the OpenAI-compatible chat-
 
 OpenAI is a fourth provider: `OPENAI_API_KEY`, and optionally `OPENAI_BASE_URL`. It has no default model, so give it one in each role you put it on, or set `OPENAI_MODEL`.
 
+## Agents on this computer
+
+Cuervo can use the coding agents a person already has installed and signed in to. No API key is involved. The agent runs under the account its owner signed in with.
+
+| Agent | Program | How it is run | Sign in with |
+| --- | --- | --- | --- |
+| Claude Code | `claude` | `claude -p --output-format json`, prompt on standard input | `claude auth login` |
+| Codex | `codex` | `codex exec --output-last-message <file> -`, prompt on standard input | `codex login` |
+| Cursor | `agent` or `cursor-agent` | `agent -p --output-format text <prompt>` | `agent login` |
+| Antigravity | `agy` | `agy acp`, the Agent Client Protocol on standard input and output | Sign in with Google in Antigravity |
+
+They are provider names `claude-code`, `codex`, `cursor-agent`, and `antigravity`. Each joins the end of every route, so a saved API key is still used first, and a person with no key can work from a signed-in agent alone. Give them their own jobs on the **Who does what** tab like any other provider.
+
+The editor's **Accounts and models** screen lists them under **On this computer**, shows which are installed, and has a **Test** button that sends one short real request. Set a model there, or a path to the program when it is not on `PATH`. The same settings are `CUERVO_CLAUDE_CODE_BIN`, `CUERVO_CODEX_BIN`, `CUERVO_CURSOR_BIN`, `CUERVO_ANTIGRAVITY_BIN`, and the matching `..._MODEL` variables.
+
+Each request runs in an empty scratch folder, never in the project. Here an agent is asked only for text, so its tools are off: Claude Code runs with no tools, no MCP servers, and no saved session. Codex runs in its read-only sandbox. An Antigravity request for a tool or a file is refused.
+
+The Claude Code path has been run against the real program, including whole editor turns. Codex, Cursor, and Antigravity are tested against stand-in programs that take the same arguments. They have not been run against the real programs from this repo.
+
+This follows how T3 Code drives the same agents for text: headless `claude -p` and `codex exec`, and ACP for Antigravity.
+
 ## A model for each job
 
 The routes above are the defaults. Each person can change them in the editor under **Accounts and models**, on the **Who does what** tab. The choice is saved to `~/.cuervo/models.json` (`CUERVO_MODELS_FILE` moves it), and the pipeline commands read the same file.

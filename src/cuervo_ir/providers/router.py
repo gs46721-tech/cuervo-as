@@ -266,6 +266,14 @@ def build_default_router(roles: bool = True) -> ProviderRouter:
     router.register(GeminiProvider())
     router.register(CursorProvider())
     router.register(OpenAIProvider())
+    # Agents signed in on this computer come last in every route, so a saved key still wins
+    # and someone with no key at all can work from their Claude Code, Codex, Cursor, or Antigravity login.
+    from cuervo_ir.providers.local import local_agents
+
+    for agent in local_agents():
+        router.register(agent)
+        for step, order in list(router.routes.items()):
+            router.routes[step] = (*order, agent.name)
     if roles:
         from cuervo_ir.roles import ModelRoles
 

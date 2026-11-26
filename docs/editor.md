@@ -21,7 +21,7 @@ For UI work, run `python3 -m cuervo_editor` and `cd editor && npm run dev`, then
 
 Each person connects their own accounts in the editor: click the provider list at the bottom of the sidebar. Claude, Gemini, OpenAI, any OpenAI-compatible endpoint, and ElevenLabs each take an API key, and optionally a model. **Save and test** makes one small read-only request to check the key.
 
-Keys are saved to `~/.cuervo/keys.json`, readable only by that user. `CUERVO_KEYS_FILE` moves the file. The API never returns a whole key. A saved key wins over one exported in the shell, and the pipeline commands read the same file. These are API keys. Signing in with a vendor account is not supported.
+Keys are saved to `~/.cuervo/keys.json`, readable only by that user. `CUERVO_KEYS_FILE` moves the file. The API never returns a whole key. A saved key wins over one exported in the shell, and the pipeline commands read the same file. The same screen lists the agents on this computer: Claude Code, Codex, Cursor, and Antigravity. Those need no key. They use the account already signed in. See [providers.md](providers.md).
 
 The **Who does what** tab gives each job its own models: orchestration, screenwriting, direction, review, voice direction, and image generation. A job with two or more models can take turns or compete. See [providers.md](providers.md).
 
@@ -46,6 +46,20 @@ The person gives a note in plain words. The agent carries it out by writing cues
 4. The edits that held are staged as one change per shot, each with its sentences.
 
 Shots pinned with `@` are the only shots that turn may change. The composer chooses the provider and the mode. **Review** leaves every change waiting for Accept or Reject. **Auto-apply** writes them as soon as they are drafted.
+
+## Production routes
+
+These are in the API. The page does not have screens for them yet.
+
+| Route | Does |
+| --- | --- |
+| `POST /api/productions` | Script and series kit in. Builds the world, storyboards, records, and animates, then opens the episode as a project |
+| `POST /api/productions/write` | Drafts a screenplay from a premise |
+| `GET /api/jobs/{id}` | The log and result of a running job |
+| `GET /api/sessions/{id}/notes` | The polish checks for the episode as it stands |
+| `POST /api/sessions/{id}/scenes/{scene}` | Mark a scene's storyboard approved |
+| `POST /api/sessions/{id}/render`, `GET .../master.mp4` | Render the episode, and fetch the result |
+| `POST /api/settings/livecheck` | One short real request per job, to confirm the accounts work |
 
 ## Review, undo, and locks
 

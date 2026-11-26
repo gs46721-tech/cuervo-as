@@ -10,7 +10,7 @@ show a cue, an id, or a patch.
     show <shot>                    the camera, cast, tracks, and lines of a shot
     find "<text>"                  lines that contain the text
 
-    hold <shot> <frames>           let the shot run longer
+    hold <shot> <frames>           let the shot run longer (whatever ran to its end still does)
     trim <shot> <frames>           take frames off the end
     camera <shot> [preset] [--on <actor>] [--zoom <n>] [--x <n>] [--y <n>]
     pose <shot> <track> <pose>     change the pose on a track
@@ -398,6 +398,8 @@ def apply(episode: Episode, cue: Cue, context: CueContext | None = None) -> tupl
         track = track_of(track_id)
         refuse_if_locked(track_id, "timing")
         start, end = _span(span, shot["duration_frames"])
+        if (start, end) == (track["start_frame"], track["end_frame"]):
+            raise CueError(f"{phrase(track_id).capitalize()} already runs from {seconds(start, fps)} to {seconds(end, fps)}.")
         shift = start - track["start_frame"]
         track["start_frame"], track["end_frame"] = start, end
         for key in track["keyframes"]:

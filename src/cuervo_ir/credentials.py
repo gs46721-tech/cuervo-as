@@ -70,8 +70,34 @@ SERVICES: dict[str, dict] = {
 FIELDS = ("key", "model", "base")
 
 
+def _local_services() -> dict[str, dict]:
+    """Agents on this computer. They have no key: `base` holds an optional path to the program."""
+
+    from cuervo_ir.providers.local import local_agents
+
+    return {
+        agent.name: {
+            "label": agent.label,
+            "role": "Uses the account you are signed in to on this computer. No key needed.",
+            "key": "",
+            "model": agent.model_env,
+            "base": agent.bin_env,
+            "default_base": "",
+            "needs_base": False,
+            "key_url": agent.install_url,
+            "agent": agent,
+        }
+        for agent in local_agents()
+    }
+
+
+SERVICES.update(_local_services())
+
+
 # What the shell exported, read once before any saved value is applied.
-_SHELL = {service[field]: os.environ.get(service[field], "") for service in SERVICES.values() for field in FIELDS}
+_SHELL = {
+    service[field]: os.environ.get(service[field], "") for service in SERVICES.values() for field in FIELDS if service[field]
+}
 
 
 class CredentialError(ValueError):
@@ -108,6 +134,8 @@ class Credentials:
         for name, service in SERVICES.items():
             saved = self._saved.get(name, {})
             for field in FIELDS:
+                if not service[field]:
+                    continue
                 value = saved.get(field) or self._shell[service[field]]
                 if value:
                     os.environ[service[field]] = value
@@ -123,7 +151,9 @@ class Credentials:
             if value is None:
                 continue
             value = value.strip()
-            if field == "base" and value and not value.startswith(("https://", "http://")):
+            if field == "key" and value and "agent" in service:
+                raise CredentialError(f"{service['label']} uses the account signed in on this computer, not a key")
+            if field == "base" and value and "agent" not in service and not value.startswith(("https://", "http://")):
                 raise CredentialError("the base URL must start with https:// or http://")
             if value:
                 entry[field] = value
@@ -133,7 +163,6 @@ class Credentials:
             self._saved[name] = entry
         else:
             self._saved.pop(name, None)
-        del service
         self._write()
         self.apply()
 
@@ -149,10 +178,32 @@ class Credentials:
         rows = []
         for name, service in SERVICES.items():
             saved = self._saved.get(name, {})
+            if "agent" in service:
+                agent = service["agent"]
+                installed = agent.available()
+                rows.append(
+                    {
+                        "name": name,
+                        "label": service["label"],
+                        "role": service["role"],
+                        "kind": "local",
+                        "connected": installed,
+                        "version": agent.version() if installed else "",
+                        "login_hint": agent.login_hint,
+                        "key_hint": "",
+                        "key_source": "",
+                        "model": saved.get("model") or self._shell[service["model"]],
+                        "base_url": saved.get("base") or self._shell[service["base"]],
+                        "needs_base": False,
+                        "key_url": service["key_url"],
+                    }
+                )
+                continue
             key = saved.get("key") or self._shell[service["key"]]
             base = saved.get("base") or self._shell[service["base"]]
             rows.append(
                 {
+                    "kind": "key",
                     "name": name,
                     "label": service["label"],
                     "role": service["role"],
@@ -180,6 +231,8 @@ def check(name: str, fetch=None) -> dict:
     """Ask the service whether the current key works. Makes one small read-only request."""
 
     service = _service(name)
+    if "agent" in service:
+        return _check_agent(service["agent"])
     key = os.environ.get(service["key"], "")
     base = (os.environ.get(service["base"], "") or service["default_base"]).rstrip("/")
     if not key:
@@ -208,6 +261,20 @@ def check(name: str, fetch=None) -> dict:
         result["voices"] = voices
         result["message"] = f"Connected. {len(voices)} voices on this account."
     return result
+
+
+def _check_agent(agent) -> dict:
+    """Ask the local agent for one word. This is a real request on the signed-in account."""
+
+    from cuervo_ir.providers.router import ModelRequest, ProviderError
+
+    if not agent.available():
+        return {"ok": False, "message": f"{agent.label} was not found on this computer. Install it, or set the path to its program."}
+    try:
+        reply = agent.complete(ModelRequest(step="review", system="You answer with exactly one word.", user="Say the word ready."))
+    except ProviderError as exc:
+        return {"ok": False, "message": str(exc)}
+    return {"ok": True, "message": f"Connected. It answered: {reply.text.strip()[:40]}", "models": []}
 
 
 def _model_ids(name: str, body) -> list[str]:
