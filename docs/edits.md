@@ -1,21 +1,47 @@
-# Natural-language edits
+# Cues: the command line of the animation
 
-A direction line becomes one typed patch for one shot. The `ir_patch` step sends the instruction and that shot's tracks to the model router. Claude is first, then Gemini, then Cursor. The reply is an `edit_patch`. It is not applied until you accept it.
+An agent changes an episode the way a person drives a command line. It writes cues, one per line. Read cues look around. Edit cues change one shot each and answer with a sentence a director can read.
 
-A patch may do only these things:
+```
+scenes                         list the scenes
+shots <scene>                  list the shots in a scene
+show <shot>                    the camera, cast, tracks, and lines of a shot
+find "<text>"                  lines that contain the text
 
-- move the frame bounds of named action tracks, and grow the shot
-- set the pose on a named track
-- change the camera preset or its position
+hold <shot> <frames>           let the shot run longer
+trim <shot> <frames>           take frames off the end
+camera <shot> [preset] [--on <actor>] [--zoom <n>] [--x <n>] [--y <n>]
+pose <shot> <track> <pose>     change the pose on a track
+act <shot> <actor> <pose> [<start>..<end>]    add a gesture, look, or expression
+move <shot> <track> <start>..<end>            retime a track
+drop <shot> <track>            remove a track
+say <shot> <line> "<text>"     rewrite a line of dialogue
+cut <shot>                     remove the shot
+```
 
-When the shot grows, later shots in the same scene keep their contents and start later. No other shot changes. A track locked for `timing` or `pose` rejects that part of the patch. The previous episode object is left as it was, so declining the preview is the undo.
+Run them yourself:
 
-`preview_frame` re-renders one frame of the changed shot after a dry apply. The five checks in `tests/test_edits.py` each start from the same generic episode and revise timing, expression, gesture, eyeline, or camera without touching the other tracks.
+```bash
+python3 -m cuervo_edit cue examples/reference-scene.json "show sh_reaction"
+python3 -m cuervo_edit cue examples/reference-scene.json "hold sh_reaction 12" \
+  "camera sh_reaction close_up --on act_nia" -o /tmp/revised.json
+```
+
+## What each edit does
+
+- `hold` and `trim` change the shot's length. Tracks that ran to the end of the shot still do. Later shots in the scene slide. `trim` will not cut into a line.
+- `camera` sets the shot size and its matching zoom. `--on` centers on a character.
+- `act` adds a track masked to the controllers its pose sets, so a gesture never fights the body or the mouth.
+- `say` rewrites a line. When the project has its takes, the line is recorded again in the same voice, lip sync is rebuilt, and the shot is retimed around the new length. Without takes the line is marked as needing one.
+- `cut` removes a shot and closes the gap. The last shot of a scene stays.
+
+A locked track, camera, or line refuses the cue that would change it, in words the director can read. Every edit bumps the shot's revision. A pose must be one the character has.
+
+## Typed patches
+
+The older `edit_patch` path is still here for a single shot: `propose` asks the `ir_patch` route for one patch, and `apply` writes it. The editor uses cues.
 
 ```bash
 python3 -m cuervo_edit propose examples/reference-scene.json --shot sh_reaction \
   --instruction "Hold the reaction 12 more frames."
-python3 -m cuervo_edit apply examples/reference-scene.json patch.json -o /tmp/revised.json
 ```
-
-`propose` needs whichever provider is first available. See `docs/providers.md`.

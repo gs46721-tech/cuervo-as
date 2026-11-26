@@ -1,0 +1,116 @@
+{
+  "kind": "series_kit",
+  "title": "Five Minutes",
+  "fps": 24,
+  "bible": [
+    "Two roommates. Small stakes. Nobody learns anything.",
+    "Nia is dry and precise. Cole is warm and evasive.",
+    "The television never turns on."
+  ],
+  "characters": [
+    {
+      "asset_id": "char_nia",
+      "display_name": "Nia Adeyemi",
+      "rig_id": "rig_nia",
+      "extension_poses": [
+        "deadpan"
+      ],
+      "rest_pose": "sit",
+      "voice": {
+        "provider": "fixture",
+        "provider_voice_id": "sample-voice-a",
+        "consent": "Sample data. Not a real performer."
+      },
+      "design": {
+        "description": "Late twenties. Neat, unhurried, unimpressed.",
+        "skin": "#8f5a3c",
+        "hair": "#1d1714",
+        "hair_style": "bun",
+        "top": "#c9773b",
+        "bottom": "#2f3542",
+        "build": "slim",
+        "height": 0.98
+      }
+    },
+    {
+      "asset_id": "char_cole",
+      "display_name": "Cole Park",
+      "rig_id": "rig_cole",
+      "extension_poses": [
+        "fidget"
+      ],
+      "rest_pose": "sit",
+      "voice": {
+        "provider": "fixture",
+        "provider_voice_id": "sample-voice-b",
+        "consent": "Sample data. Not a real performer."
+      },
+      "design": {
+        "description": "Early thirties. Soft, rumpled, always mid-excuse.",
+        "skin": "#e8b98f",
+        "hair": "#5a3a22",
+        "hair_style": "curly",
+        "top": "#4d8a6a",
+        "bottom": "#3b3f4d",
+        "build": "broad",
+        "height": 1.04,
+        "long_sleeves": false
+      }
+    }
+  ],
+  "sets": [
+    {
+      "asset_id": "bg_living_room",
+      "display_name": "Living room",
+      "location_id": "loc_living_room",
+      "design": {
+        "description": "A lived-in living room in the evening.",
+        "wall": "#d8c9ae",
+        "floor": "#7b5d47",
+        "accent": "#5f7f88",
+        "time": "evening",
+        "furniture": [
+          {
+            "kind": "window",
+            "x": -330,
+            "width": 150
+          },
+          {
+            "kind": "frame",
+            "x": 300,
+            "width": 110,
+            "color": "#c9a45c"
+          },
+          {
+            "kind": "lamp",
+            "x": 390,
+            "width": 80,
+            "color": "#e6c36a"
+          },
+          {
+            "kind": "sofa",
+            "x": 0,
+            "width": 500
+          },
+          {
+            "kind": "rug",
+            "x": 0,
+            "width": 560,
+            "color": "#a8563f"
+          }
+        ]
+      }
+    }
+  ],
+  "poses": {
+    "deadpan": {
+      "brow_l": -0.2,
+      "brow_r": -0.2,
+      "mouth": 0.05
+    },
+    "fidget": {
+      "hand_l": 0.3,
+      "hand_r": -0.3
+    }
+  }
+}

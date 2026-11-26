@@ -21,12 +21,21 @@ def render_png(
     shot: Shot,
     frame: int,
     library: dict[str, dict[str, float]] | None = None,
+    world=None,
+    size: tuple[int, int] | None = None,
 ) -> bytes:
+    """One frame. With a world that holds this shot's art, the cast is drawn from its parts."""
+
     if frame < 0 or frame >= shot.duration_frames:
         raise ValueError(f"frame {frame} is outside shot {shot.shot_id}")
-    image = Image.new("RGB", (WIDTH, HEIGHT), _swatch(shot_background(episode, shot)))
+    if world is not None:
+        drawn = _render_from_world(episode, shot, frame, library, world, size or (WIDTH, HEIGHT))
+        if drawn is not None:
+            return drawn
+    backdrop = _swatch(shot_background(episode, shot))
+    image = Image.new("RGB", (WIDTH, HEIGHT), backdrop)
     draw = ImageDraw.Draw(image)
-    _camera_frame(draw, shot)
+    _ground(draw, shot, backdrop)
     for actor in sorted(shot.actors, key=lambda item: item.depth):
         if not actor.visible:
             continue
@@ -36,9 +45,45 @@ def render_png(
             name, weight = viseme
             for controller, value in VISEME_MOUTH[name].items():
                 controls[controller] = value * weight
-        _draw_actor(draw, actor, controls, _camera_pan(shot))
+        _draw_actor(draw, actor, controls, _camera_pan(shot), shot.camera.transform.scale)
     buffer = BytesIO()
     image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _render_from_world(episode: Episode, shot: Shot, frame: int, library, world, size: tuple[int, int]) -> bytes | None:
+    """Cut-out render. Returns None when the world is missing art for this shot, so shapes are used."""
+
+    from cuervo_runtime.puppet import UNIT, backdrop, draw_character
+
+    versions = {(ref.role, ref.asset_id): ref.version for ref in shot.asset_refs}
+    cast = []
+    for actor in sorted(shot.actors, key=lambda item: item.depth):
+        art = world.character(actor.character_id, versions.get(("character", actor.character_id), ""))
+        if art is None:
+            return None
+        cast.append((actor, art))
+    width, height = size
+    ratio = width / WIDTH
+    zoom = shot.camera.transform.scale
+    pan = _camera_pan(shot)
+    setting = shot_background(episode, shot)
+    plate = world.plate(setting, versions.get(("background", setting), ""))
+    if plate is not None:
+        image = backdrop(plate, size, (pan[0] * ratio, pan[1] * ratio), zoom)
+    else:
+        image = Image.new("RGBA", size, (*_swatch(setting), 255))
+    for actor, art in cast:
+        if not actor.visible:
+            continue
+        controls = controls_at(shot, actor.actor_id, frame, library)
+        spoken = viseme_at(shot, actor.actor_id, frame)
+        base_x = (WIDTH / 2 + actor.stage.x * 0.7 - pan[0]) * ratio
+        base_y = (HEIGHT * 0.72 - 8 - actor.stage.y * 0.4 + pan[1]) * ratio
+        hips = (width / 2 + (base_x - width / 2) * zoom, height / 2 + (base_y - height / 2) * zoom)
+        draw_character(image, art, controls, spoken[0] if spoken else None, hips, UNIT * ratio * zoom, "left" in actor.facing)
+    buffer = BytesIO()
+    image.convert("RGB").save(buffer, format="PNG")
     return buffer.getvalue()
 
 
@@ -62,49 +107,57 @@ def _swatch(key: str) -> tuple[int, int, int]:
     return tuple(48 + byte % 160 for byte in digest[:3])
 
 
-def _camera_frame(draw: ImageDraw.ImageDraw, shot: Shot) -> None:
+def _ground(draw: ImageDraw.ImageDraw, shot: Shot, base: tuple[int, int, int]) -> None:
+    """A floor under the cast, so a zoom reads as a zoom."""
+
     scale = shot.camera.transform.scale
-    left = int(WIDTH * (1 - min(scale, 2.4) / 2.4) / 2)
-    top = int(40 + (scale - 1) * 30)
-    draw.rectangle((left, top, WIDTH - left - 1, HEIGHT - 20), outline=(255, 255, 255))
+    pan_y = _camera_pan(shot)[1]
+    line = int(HEIGHT / 2 + (HEIGHT * 0.72 + 30 + pan_y - HEIGHT / 2) * scale)
+    if line < HEIGHT:
+        draw.rectangle((0, max(0, line), WIDTH, HEIGHT), fill=tuple(max(0, value - 28) for value in base))
 
 
-def _draw_actor(draw: ImageDraw.ImageDraw, actor, controls: dict[str, float], pan: tuple[int, int]) -> None:
-    origin_x = int(WIDTH / 2 + actor.stage.x * 0.7 + controls["root"] * 20 - pan[0])
-    origin_y = int(HEIGHT * 0.72 - actor.stage.y * 0.4 - controls["torso"] * 16 + pan[1])
+def _draw_actor(draw: ImageDraw.ImageDraw, actor, controls: dict[str, float], pan: tuple[int, int], scale: float = 1.0) -> None:
+    """Draw one figure. The camera scale zooms about the middle of the frame."""
+
+    base_x = WIDTH / 2 + actor.stage.x * 0.7 + controls["root"] * 20 - pan[0]
+    base_y = HEIGHT * 0.72 - actor.stage.y * 0.4 - controls["torso"] * 16 + pan[1]
+
+    def at(dx: float, dy: float) -> tuple[int, int]:
+        return (
+            int(WIDTH / 2 + (base_x + dx - WIDTH / 2) * scale),
+            int(HEIGHT / 2 + (base_y + dy - HEIGHT / 2) * scale),
+        )
+
+    def thick(value: float) -> int:
+        return max(1, int(round(value * scale)))
+
     color = _swatch(actor.character_id)
     facing = -1 if "left" in actor.facing else 1
+    draw.line((*at(-10, 0), *at(-10, 28 + int(controls["leg_l"] * 10))), fill=color, width=thick(4))
+    draw.line((*at(10, 0), *at(10, 28 + int(controls["leg_r"] * 10))), fill=color, width=thick(4))
+    draw.rectangle((*at(-16, -48), *at(16, 0)), fill=color)
     draw.line(
-        (origin_x - 10, origin_y, origin_x - 10, origin_y + 28 + int(controls["leg_l"] * 10)),
+        (*at(-16, -36), *at(-16 - facing * int(18 + controls["arm_l"] * 24), -36 - int(controls["hand_l"] * 20))),
         fill=color,
-        width=4,
+        width=thick(3),
     )
     draw.line(
-        (origin_x + 10, origin_y, origin_x + 10, origin_y + 28 + int(controls["leg_r"] * 10)),
+        (*at(16, -36), *at(16 + facing * int(18 + controls["arm_r"] * 24), -36 - int(controls["hand_r"] * 20))),
         fill=color,
-        width=4,
+        width=thick(3),
     )
-    torso_box = (origin_x - 16, origin_y - 48, origin_x + 16, origin_y)
-    draw.rectangle(torso_box, fill=color)
-    arm_y = origin_y - 36
-    draw.line(
-        (origin_x - 16, arm_y, origin_x - 16 - facing * int(18 + controls["arm_l"] * 24), arm_y - int(controls["hand_l"] * 20)),
-        fill=color,
-        width=3,
-    )
-    draw.line(
-        (origin_x + 16, arm_y, origin_x + 16 + facing * int(18 + controls["arm_r"] * 24), arm_y - int(controls["hand_r"] * 20)),
-        fill=color,
-        width=3,
-    )
-    head_y = origin_y - 70 - int(controls["head"] * 8)
-    draw.ellipse((origin_x - 14, head_y - 14, origin_x + 14, head_y + 14), fill=color)
+    head = -70 - int(controls["head"] * 8)
+    draw.ellipse((*at(-14, head - 14), *at(14, head + 14)), fill=color)
     eye_h = max(1, int(4 * (1 - controls["blink"])))
     gaze = int(controls["gaze_yaw"] * 4)
+    brow = int((controls["brow_l"] + controls["brow_r"]) * 2)
     for side in (-5, 5):
-        draw.rectangle((origin_x + side + gaze - 2, head_y - eye_h, origin_x + side + gaze + 2, head_y + eye_h), fill=(250, 250, 250))
+        draw.rectangle((*at(side + gaze - 2, head - eye_h), *at(side + gaze + 2, head + eye_h)), fill=(250, 250, 250))
+        if scale >= 1.4:
+            draw.line((*at(side - 3, head - 8 - brow), *at(side + 3, head - 8 - brow)), fill=(30, 30, 30), width=thick(1))
     mouth_h = 2 + int(controls["mouth"] * 8) + int(controls["jaw"] * 6)
-    draw.rectangle((origin_x - 5, head_y + 4, origin_x + 5, head_y + 4 + mouth_h), fill=(30, 30, 30))
+    draw.rectangle((*at(-5, head + 4), *at(5, head + 4 + mouth_h)), fill=(30, 30, 30))
 
 
 class FramePlayer:

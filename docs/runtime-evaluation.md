@@ -15,4 +15,4 @@ Score each candidate on the same reference scene once a rig exists:
 | Determinism | Does the same shot JSON produce the same frames on two machines? |
 | Headless | Can a worker step one frame at a time with no window? |
 
-`cuervo_runtime` is the headless preview from week 2. The scorecard above is still open for Rive, Spine, and PixiJS. This slice does not lock the product to one of them.
+`cuervo_runtime` now also draws cut-out animation from the world's art, which is what the pipeline renders. The scorecard above is still open for Rive, Spine, and PixiJS. This slice does not lock the product to one of them.
