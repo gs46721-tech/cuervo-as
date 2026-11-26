@@ -49,12 +49,23 @@ The built-in art is the house style: flat color and one even line, drawn from th
 
 To use art from an illustrator or an image model, replace the PNG files in a character's version folder. Keep each part's size and pivot as `rig.json` gives them, or edit `rig.json` to match. Do this while the asset is a draft, then approve it.
 
-## Painted sets
+## Painted sets and characters
 
-Put one or more models on the **Image generation** role and every new set is also painted by an image model. Gemini and OpenAI image models are supported. The set's design becomes one prompt: the house rules for a background plate, the description, the colors, the time of day, and where the furniture goes. Every model gets the same prompt.
+Put one or more models on the **Image generation** role and the world is also painted by image models. Gemini and OpenAI image models are supported. Every model gets the same prompt, built from the design.
 
-Each picture is cropped to 16:9 and kept beside the house-style plate. The first painted picture is used until someone picks another on the World screen. Picking a different picture redraws the shots on that set. An approved set must be reopened before its picture can change.
+**Sets.** Each model paints the set as one background plate. The picture is cropped to 16:9 and kept beside the house-style plate. The first painted picture is used until someone picks another.
 
-Characters are not painted. They are built from parts so they can be animated and stay on model.
+**Characters.** Each model paints the character once: standing, facing the viewer, arms held away from the body, legs apart, on a plain background. Cuervo then cuts that one picture into the animated parts.
 
-The two image adapters are tested against the documented response shapes. They have not been run against a live account from this repo. Only the three-quarter view of a character is built. Front, side, and back views are not.
+1. The background is cleared by filling in from the edges, so a white shirt or the whites of the eyes are kept.
+2. The arms are found where the figure is in three pieces, and the legs where the body is in two.
+3. The figure is cut at the neck, shoulders, elbows, hips, and knees, and the rig is measured from those cuts.
+4. The painted face is kept. A blink and a spoken mouth are drawn over it on a patch of the character's own skin color.
+
+A picture that cannot be cut is not offered, and the build log says why: the arms touch the body, the legs are together, or there is no figure. The house style stays in use until someone looks at the painted model sheet and picks it. A painted character faces the viewer, so it looks the same turned left or right.
+
+Picking a different look, for a set or a character, redraws the shots that use it. An approved asset must be reopened before its look can change. The reference picture each model painted is kept beside its parts as `reference.png`.
+
+The eyes and mouth of a painted face are placed by proportion, at about half and three quarters of the way down the head. If they sit wrong on a particular picture, edit the `face` positions in that candidate's `rig.json`.
+
+The two image adapters are tested against the documented response shapes, and the cutter against a drawn stand-in figure. Neither has been run on a real image model's picture from this repo. Only the three-quarter view of a character is built. Front, side, and back views are not.

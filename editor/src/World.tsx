@@ -77,7 +77,7 @@ export function WorldView({ state, onClose, onChanged }: { state: SessionState; 
                             key={candidate.file}
                             className={index === asset.chosen ? "candidate chosen" : "candidate"}
                             disabled={asset.status === "approved" || index === asset.chosen}
-                            title={asset.status === "approved" ? "Reopen the set to pick another picture" : "Use this picture for the set"}
+                            title={asset.status === "approved" ? "Reopen it to pick another look" : "Use this look"}
                             onClick={() =>
                               api
                                 .worldChoose(state.session_id, asset.asset_id, index)

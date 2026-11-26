@@ -137,6 +137,20 @@ def draw_character(
     neck = from_point(root, tuple(rig["neck"]), lean)
     paste("head", neck, tilt)
     face = rig["face"]
+    if rig.get("face_mode") == "painted":
+        # The painted face stays. A blink and a spoken mouth go over it on a patch of the character's skin.
+        if controls.get("blink", 0.0) > 0.5:
+            for which in ("l", "r"):
+                spot = from_point(neck, tuple(face[f"eye_{which}"]), tilt)
+                paste("eye_patch", spot, tilt)
+                paste("eye_closed", spot, tilt)
+        mouth = mouth_for(controls, viseme)
+        if mouth != "rest":
+            spot = from_point(neck, tuple(face["mouth"]), tilt)
+            paste("mouth_patch", spot, tilt)
+            paste(f"mouth_{mouth}", spot, tilt)
+        arm("r", 1)
+        return
     look = (controls.get("gaze_yaw", 0.0) * 3, controls.get("gaze_pitch", 0.0) * 2)
     eye = "eye_closed" if controls.get("blink", 0.0) > 0.5 else "eye_open"
     for which in ("l", "r"):

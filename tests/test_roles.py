@@ -159,8 +159,8 @@ def test_image_models_each_paint_a_set_and_a_person_picks(tmp_path):
     world.choose("bg_workshop", 2)
     assert world.plate("bg_workshop", "1.0.0").getpixel((10, 10)) == (30, 30, 200)
     assert world.stamp(["bg_workshop"]) != before  # shots on this set will be drawn again
-    # Characters are never painted: they stay parts.
-    assert "candidates" not in world.entry("char_ada")
+    # A picture with no figure in it cannot be cut into a character, so the house style is the only choice.
+    assert world.entry("char_ada")["candidates"] == [{"file": "house", "by": "house style"}]
     # A second build keeps the pick.
     assert World(tmp_path / "world").build(kit, painters=[("gemini", "")], engines=engines) == []
     assert World(tmp_path / "world").entry("bg_workshop")["chosen"] == 2

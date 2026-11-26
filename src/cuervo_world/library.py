@@ -97,14 +97,17 @@ class World:
             design = character.design or default_character_design(character.asset_id)
             if self._claim(character.asset_id, "character", character.version, digest(design), character.display_name):
                 folder = self.path / "characters" / character.asset_id / character.version
-                folder.mkdir(parents=True, exist_ok=True)
-                parts, rig = character_parts(design)
-                for name, image in parts.items():
-                    image.save(folder / f"{name}.png")
-                (folder / "rig.json").write_text(json.dumps(rig, indent=2), encoding="utf-8")
-                self._characters.pop((character.asset_id, character.version), None)
                 extra = {pose: kit.poses[pose] for pose in character.extension_poses if pose in kit.poses}
-                model_sheet(CharacterArt(parts, rig), character.display_name, extra).save(folder / "sheet.png")
+                parts, rig = character_parts(design)
+                _write_character(folder / "house", parts, rig, character.display_name, extra)
+                candidates = [{"file": "house", "by": "house style"}]
+                candidates += self._paint_character(folder, character.display_name, design, kit.bible, extra, painters or [], engines, log)
+                entry = self.manifest["assets"][character.asset_id]
+                entry["candidates"] = candidates
+                # The house style stays in use until someone looks at a painted one and picks it.
+                entry["chosen"] = 0
+                _activate(folder, folder / "house")
+                self._characters.pop((character.asset_id, character.version), None)
                 built.append(character.asset_id)
         for item in kit.sets:
             design = item.design or SetDesign()
@@ -153,24 +156,59 @@ class World:
             made.append({"file": file, "by": f"{provider} {model or engine.default_model}"})
         return made
 
+    def _paint_character(self, folder: Path, name: str, design, bible, extra, painters, engines, log) -> list[dict]:
+        """Each image model paints the character once. Each picture that can be cut becomes a candidate."""
+
+        from cuervo_world.cutout import CutError, cut_character
+        from cuervo_world.imagegen import ImageError, character_prompt, default_engines, to_picture
+
+        engines = engines if engines is not None else default_engines()
+        prompt = character_prompt(name, design, bible)
+        made: list[dict] = []
+        for provider, model in painters:
+            engine = engines.get(provider)
+            if engine is None or not engine.available():
+                continue
+            try:
+                picture = to_picture(engine.paint(prompt, model or None))
+                parts, rig = cut_character(picture, design)
+            except (ImageError, CutError) as exc:
+                if log:
+                    log(f"  {name}: the picture from {provider} was not used. {exc}")
+                continue
+            target = folder / f"painted-{len(made) + 1}"
+            _write_character(target, parts, rig, name, extra)
+            picture.save(target / "reference.png")
+            made.append({"file": target.name, "by": f"{provider} {model or engine.default_model}"})
+        return made
+
     def choose(self, asset_id: str, index: int) -> None:
-        """Use another candidate as the set's plate. Only while the set is a draft."""
+        """Use another candidate for a set or a character. Only while it is a draft."""
 
         entry = self.entry(asset_id)
-        if entry is None or entry["kind"] != "set":
-            raise WorldError(f"{asset_id} is not a set in the world")
+        if entry is None:
+            raise WorldError(f"{asset_id} is not in the world")
         if entry["status"] == "approved":
-            raise WorldError(f"{entry['name']} is approved. Reopen it to pick another picture.")
+            raise WorldError(f"{entry['name']} is approved. Reopen it to pick another look.")
         candidates = entry.get("candidates") or []
         if not 0 <= index < len(candidates):
             raise WorldError("there is no such picture")
+        if entry["kind"] == "character":
+            folder = self.path / "characters" / asset_id / entry["version"]
+            _activate(folder, folder / candidates[index]["file"])
+            self._characters.pop((asset_id, entry["version"]), None)
+            self._finish_choice(entry, candidates, index)
+            return
         folder = self.path / "sets" / asset_id / entry["version"]
         Image.open(folder / candidates[index]["file"]).save(folder / "plate.png")
+        self._plates.pop((asset_id, entry["version"]), None)
+        self._finish_choice(entry, candidates, index)
+
+    def _finish_choice(self, entry: dict, candidates: list[dict], index: int) -> None:
         entry["chosen"] = index
         entry["source"] = candidates[index]["by"]
         # A different picture is a different look, so shots that use it are drawn again.
         entry["digest"] = f"{entry['digest'].split('+')[0]}+{index}"
-        self._plates.pop((asset_id, entry["version"]), None)
         self._save()
 
     def candidate_path(self, asset_id: str, index: int) -> Path | None:
@@ -178,7 +216,10 @@ class World:
         candidates = (entry or {}).get("candidates") or []
         if entry is None or not 0 <= index < len(candidates):
             return None
-        path = self.path / "sets" / asset_id / entry["version"] / candidates[index]["file"]
+        if entry["kind"] == "character":
+            path = self.path / "characters" / asset_id / entry["version"] / candidates[index]["file"] / "sheet.png"
+        else:
+            path = self.path / "sets" / asset_id / entry["version"] / candidates[index]["file"]
         return path if path.is_file() else None
 
     def approve(self, asset_id: str, approved: bool = True) -> None:
@@ -213,6 +254,26 @@ class World:
     def _save(self) -> None:
         self.path.mkdir(parents=True, exist_ok=True)
         (self.path / "world.json").write_text(json.dumps(self.manifest, indent=2), encoding="utf-8")
+
+
+def _write_character(folder: Path, parts: dict, rig: dict, name: str, extra_poses: dict) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    for part, image in parts.items():
+        image.save(folder / f"{part}.png")
+    (folder / "rig.json").write_text(json.dumps(rig, indent=2), encoding="utf-8")
+    model_sheet(CharacterArt(parts, rig), name, extra_poses).save(folder / "sheet.png")
+
+
+def _activate(folder: Path, candidate: Path) -> None:
+    """Make one candidate the art in use: its files replace the ones at the top of the version folder."""
+
+    import shutil
+
+    for old in folder.glob("*.png"):
+        old.unlink()
+    for item in candidate.iterdir():
+        if item.is_file() and item.name != "reference.png":
+            shutil.copyfile(item, folder / item.name)
 
 
 def default_character_design(asset_id: str) -> CharacterDesign:

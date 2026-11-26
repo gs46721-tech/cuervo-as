@@ -61,6 +61,42 @@ def set_prompt(name: str, design: SetDesign, bible: list[str] | None = None) -> 
     return " ".join(parts)
 
 
+CHARACTER_STYLE = (
+    "A full-body character design for a 2D animated sitcom, drawn as a reference to be cut into a paper puppet. "
+    "One character only, standing upright and facing the viewer, head level. Both arms hang straight down and are "
+    "held clearly away from the body, so empty background shows between each arm and the torso from shoulder to "
+    "hand. The legs are straight and set apart, so empty background shows between them from the hips to the shoes. "
+    "Hands open, feet flat. Neutral face, mouth closed, eyes open. Flat local color, one clean even dark outline, "
+    "no shading, no gradients, no shadow on the ground, no text, no props. The background is one plain solid bright "
+    "green and nothing else. The whole figure, from the top of the hair to the soles of the shoes, is inside the "
+    "picture with a margin all round."
+)
+
+
+def character_prompt(name: str, design, bible: list[str] | None = None) -> str:
+    """The one prompt every image model gets for a character."""
+
+    hair = "a bald head" if design.hair_style == "bald" else f"{design.hair_style} hair, color {design.hair}"
+    sleeves = "long sleeves" if design.long_sleeves else "short sleeves"
+    parts = [
+        CHARACTER_STYLE,
+        f"The character: {name}.",
+        design.description,
+        f"{design.build.capitalize()} build. Skin color {design.skin}, {hair}. A top in {design.top} with {sleeves}, "
+        f"trousers in {design.bottom}, shoes in {design.shoes}.{' Wears glasses.' if design.glasses else ''}",
+    ]
+    if bible:
+        parts.append("About the show: " + " ".join(bible[:4]))
+    return " ".join(part for part in parts if part)
+
+
+def to_picture(raw: bytes) -> Image.Image:
+    try:
+        return Image.open(BytesIO(raw)).convert("RGB")
+    except Exception as exc:
+        raise ImageError("the image model did not return a picture") from exc
+
+
 def to_plate(raw: bytes) -> Image.Image:
     """Any picture a model returns, cropped to 16:9 and sized as a plate."""
 
