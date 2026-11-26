@@ -1,10 +1,22 @@
+export type LockProperty = "timing" | "pose" | "camera" | "dialogue"
+
 export type Track = {
   track_id: string
   kind: string
+  actor_id: string
   start_frame: number
   end_frame: number
   pose: string
-  locks: string[]
+  locks: LockProperty[]
+}
+
+export type Line = {
+  track_id: string
+  speaker_actor_id: string
+  text: string
+  start_frame: number
+  end_frame: number
+  locks: LockProperty[]
 }
 
 export type Shot = {
@@ -13,66 +25,178 @@ export type Shot = {
   start_frame: number
   duration_frames: number
   revision: string
+  note: string
   camera_preset: string
+  camera_x: number
+  camera_y: number
+  camera_locked: boolean
   framing: string
   actors: { actor_id: string; character_id: string; facing: string }[]
   assets: { role: string; asset_id: string; version: string }[]
   tracks: Track[]
+  lines: Line[]
 }
 
 export type EpisodeView = {
   episode_id: string
   title: string
   fps: number
+  total_frames: number
+  scenes: { scene_id: string; title: string; objective: string }[]
   characters: { asset_id: string; display_name: string }[]
   backgrounds: { asset_id: string; display_name: string }[]
   props: { asset_id: string; display_name: string }[]
   shots: Shot[]
-  lines: { shot_id: string; speaker_actor_id: string; text: string; start_frame: number; end_frame: number }[]
+  lines: (Line & { shot_id: string })[]
 }
+
+export type DiffRow = { target: string; field: string; before: string; after: string }
+
+export type ChangeState = "pending" | "applied" | "undone" | "rejected" | "failed" | "discarded"
+
+export type Change = {
+  change_id: string
+  shot_id: string
+  instruction: string
+  state: ChangeState
+  stale: boolean
+  patch: { extend_shot_frames?: number } | null
+  diff: DiffRow[]
+  affected: string[]
+  provider: string | null
+  model: string | null
+  error: string | null
+}
+
+export type Step = { label: string; detail: string; status: "running" | "done" | "failed" }
+
+export type TurnMode = "review" | "auto"
+
+export type Turn = {
+  turn_id: string
+  instruction: string
+  shot_ids: string[]
+  provider: string | null
+  mode: TurnMode
+  status: "running" | "done" | "failed" | "stopped"
+  reply: string
+  error: string | null
+  steps: Step[]
+  changes: Change[]
+  created_at: number
+  finished_at: number | null
+}
+
+export type Thread = { thread_id: string; title: string; created_at: number; turns: Turn[] }
 
 export type SessionState = {
+  session_id: string
   episode: EpisodeView
-  snapshots: number
-  can_redo: boolean
-  pending: boolean
+  has_poses: boolean
+  version: number
+  undo: number
+  redo: number
+  threads: Thread[]
 }
 
-export type Proposal = {
-  patch: Record<string, unknown>
-  affected: string[]
-  diff: string[]
+export type SessionCard = {
+  session_id: string
+  episode_id: string
+  title: string
+  updated_at: number
+  threads: number
+  pending: number
+  running: boolean
 }
+
+export type ProviderInfo = { name: string; available: boolean; model: string | null }
+export type Providers = { providers: ProviderInfo[]; routes: Record<string, string[]> }
 
 async function readError(response: Response): Promise<string> {
   try {
-    const body = (await response.json()) as { detail?: string }
-    return body.detail ?? response.statusText
+    const body = (await response.json()) as { detail?: unknown }
+    if (typeof body.detail === "string") {
+      return body.detail
+    }
+    if (Array.isArray(body.detail) && body.detail.length) {
+      const first = body.detail[0] as { msg?: string }
+      return first.msg ?? response.statusText
+    }
   } catch {
-    return response.statusText
+    // Not JSON. Fall through to the status line.
   }
+  if (response.status >= 500) {
+    return "The editor API is not answering. Start it with: python3 -m cuervo_editor"
+  }
+  return response.statusText || `HTTP ${response.status}`
 }
 
-export async function openSession(episode: unknown, poses: unknown | null): Promise<{ session_id: string } & SessionState> {
-  const response = await fetch("/api/sessions", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ episode, poses }),
-  })
+async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method,
+      headers: body === undefined ? undefined : { "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch {
+    throw new Error("The editor API is not reachable. Start it with: python3 -m cuervo_editor")
+  }
   if (!response.ok) {
     throw new Error(await readError(response))
   }
-  return response.json()
+  return response.json() as Promise<T>
 }
 
-export async function postJson<T>(url: string, body?: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (!response.ok) {
-    throw new Error(await readError(response))
+export const api = {
+  providers: () => call<Providers>("GET", "/api/providers"),
+  sessions: () => call<{ sessions: SessionCard[] }>("GET", "/api/sessions"),
+  open: (episode: unknown, poses: unknown | null) => call<SessionState>("POST", "/api/sessions", { episode, poses }),
+  read: (id: string) => call<SessionState>("GET", `/api/sessions/${id}`),
+  remove: (id: string) => call<unknown>("DELETE", `/api/sessions/${id}`),
+  newThread: (id: string) => call<SessionState & { thread_id: string }>("POST", `/api/sessions/${id}/threads`),
+  renameThread: (id: string, thread: string, title: string) =>
+    call<SessionState>("PATCH", `/api/sessions/${id}/threads/${thread}`, { title }),
+  removeThread: (id: string, thread: string) => call<SessionState>("DELETE", `/api/sessions/${id}/threads/${thread}`),
+  turn: (
+    id: string,
+    thread: string,
+    body: { instruction: string; shot_ids: string[]; focus_shot_id: string | null; provider: string | null; mode: TurnMode },
+  ) => call<SessionState>("POST", `/api/sessions/${id}/threads/${thread}/turns`, body),
+  turnAction: (id: string, turn: string, action: "stop" | "accept" | "reject" | "revert") =>
+    call<SessionState>("POST", `/api/sessions/${id}/turns/${turn}/${action}`),
+  changeAction: (id: string, change: string, action: "accept" | "reject") =>
+    call<SessionState>("POST", `/api/sessions/${id}/changes/${change}/${action}`),
+  history: (id: string, action: "undo" | "redo") => call<SessionState>("POST", `/api/sessions/${id}/${action}`),
+  lock: (id: string, shot_id: string, track_id: string, properties: LockProperty[]) =>
+    call<SessionState>("POST", `/api/sessions/${id}/lock`, { shot_id, track_id, properties }),
+}
+
+export function frameUrl(state: SessionState, shotId: string, frame: number): string {
+  return `/api/sessions/${state.session_id}/frames/${shotId}/${frame}.png?v=${state.version}`
+}
+
+export function changeFrameUrl(state: SessionState, changeId: string, frame: number): string {
+  return `/api/sessions/${state.session_id}/changes/${changeId}/frames/${frame}.png?v=${state.version}`
+}
+
+export function exportUrl(sessionId: string): string {
+  return `/api/sessions/${sessionId}/episode.json`
+}
+
+export function timecode(frame: number, fps: number): string {
+  const seconds = Math.floor(frame / fps)
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return `${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}:${pad(frame % fps)}`
+}
+
+export function threadStatus(thread: Thread): "running" | "review" | "failed" | "idle" {
+  if (thread.turns.some((turn) => turn.status === "running")) {
+    return "running"
   }
-  return response.json()
+  if (thread.turns.some((turn) => turn.changes.some((change) => change.state === "pending"))) {
+    return "review"
+  }
+  const last = thread.turns[thread.turns.length - 1]
+  return last && last.status === "failed" ? "failed" : "idle"
 }

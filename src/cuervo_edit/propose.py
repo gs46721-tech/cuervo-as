@@ -6,7 +6,7 @@ import json
 
 from cuervo_ir.contract import allowed_poses
 from cuervo_ir.models import Episode
-from cuervo_ir.providers.router import ModelRequest, ProviderRouter
+from cuervo_ir.providers.router import ModelRequest, ModelResponse, ProviderRouter
 from cuervo_edit.edits import EditError, EditPatch, _shot
 
 
@@ -17,7 +17,27 @@ SYSTEM = (
 )
 
 
-def propose_edit(episode: Episode, shot_id: str, instruction: str, router: ProviderRouter) -> EditPatch:
+def propose_edit(
+    episode: Episode,
+    shot_id: str,
+    instruction: str,
+    router: ProviderRouter,
+    *,
+    only: str | None = None,
+) -> EditPatch:
+    return request_edit(episode, shot_id, instruction, router, only=only)[0]
+
+
+def request_edit(
+    episode: Episode,
+    shot_id: str,
+    instruction: str,
+    router: ProviderRouter,
+    *,
+    only: str | None = None,
+) -> tuple[EditPatch, ModelResponse]:
+    """Like `propose_edit`, and also says which provider and model answered."""
+
     shot = _shot(episode, shot_id)
     characters = {item.asset_id: item for item in episode.assets.characters}
     tracks = []
@@ -29,6 +49,9 @@ def propose_edit(episode: Episode, shot_id: str, instruction: str, router: Provi
                 "track_id": track.track_id,
                 "kind": track.kind,
                 "actor_id": actor.actor_id,
+                "pose": track.keyframes[0].pose,
+                "start_frame": track.start_frame,
+                "end_frame": track.end_frame,
                 "allowed_poses": sorted(allowed_poses(character.extension_poses)),
             }
         )
@@ -41,13 +64,25 @@ def propose_edit(episode: Episode, shot_id: str, instruction: str, router: Provi
                     "instruction": instruction,
                     "target_shot_id": shot.shot_id,
                     "base_revision": shot.provenance.revision,
+                    "fps": shot.fps,
+                    "duration_frames": shot.duration_frames,
                     "tracks": tracks,
                     "camera_preset": shot.camera.preset,
+                    "dialogue": [
+                        {
+                            "speaker_actor_id": line.speaker_actor_id,
+                            "text": line.text,
+                            "start_frame": line.start_frame,
+                            "end_frame": line.end_frame,
+                        }
+                        for line in shot.dialogue_tracks
+                    ],
                     "locks": [lock.model_dump(mode="json") for lock in shot.locks],
                 }
             ),
             response_schema=EditPatch.model_json_schema(),
-        )
+        ),
+        only=only,
     )
     try:
         payload = json.loads(_strip_fence(response.text))
@@ -58,7 +93,7 @@ def propose_edit(episode: Episode, shot_id: str, instruction: str, router: Provi
         raise EditError(f"patch targeted {patch.target_shot_id}, not {shot_id}")
     if patch.base_revision != shot.provenance.revision:
         raise EditError("patch revision does not match the shot")
-    return patch
+    return patch, response
 
 
 def _strip_fence(text: str) -> str:

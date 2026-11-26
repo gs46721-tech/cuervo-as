@@ -12,7 +12,7 @@ t3's provider relay was not reachable from this environment (the tunnel returned
 | `direction` | Claude, Gemini, Cursor | Blocking, shot choice, beat timing |
 | `ir_patch` | Claude, Gemini, Cursor | A schema-valid patch, with the others as fallback |
 | `asset_assist` | Gemini, Claude, Cursor | Image and model-sheet help |
-| `editor_assist` | Cursor, Claude, Gemini | Edits in the authoring UI |
+| `editor_assist` | Cursor, Claude, Gemini | Reads a direction in the editor and picks the shots to change |
 | `review` | Gemini, Claude, Cursor | A second pass, not the writer that drafted the line |
 | `voice_prep` | Claude, Gemini, Cursor | Emotion and pronunciation for a line. Synthesis stays on a voice adapter |
 
