@@ -29,7 +29,7 @@ The **Who does what** tab gives each job its own models: orchestration, screenwr
 
 | Pane | What it holds |
 | --- | --- |
-| Sidebar | Projects, and the threads inside the open project. A dot marks a thread with changes waiting for review. |
+| Sidebar | New episode, World, Storyboard, Render, then projects and the threads inside the open project. A dot marks a thread with changes waiting for review. |
 | Thread | Your directions and the agent's turns: a work log, a reply, and one card per changed shot. |
 | Stage | The frame player, the shot strip, and a timeline of the selected shot's tracks. Script and shot details are tabs. |
 | World | The cast's model sheets and the sets, each with its version and an Approve button. |
@@ -47,9 +47,18 @@ The person gives a note in plain words. The agent carries it out by writing cues
 
 Shots pinned with `@` are the only shots that turn may change. The composer chooses the provider and the mode. **Review** leaves every change waiting for Accept or Reject. **Auto-apply** writes them as soon as they are drafted.
 
-## Production routes
+## From script to finished episode
 
-These are in the API. The page does not have screens for them yet.
+Everything happens in the page.
+
+1. **New episode.** Choose the series file, then paste a script or give a premise and have one written. **Make the episode** builds the cast and sets, storyboards the script, records the voices, and animates it. A log in plain words shows each step.
+2. **Storyboard.** Every shot of every scene as a panel, with its size, length, and first line. Click a panel to put that shot on the stage. Approve each scene when it reads.
+3. **Notes.** A tab on the stage lists what the checks found, problems first. Click a note to go to its shot. The list is read again whenever the cut changes.
+4. **Render.** Pick a picture size and render. Only shots that changed are drawn again. The video plays in the page and can be downloaded.
+
+**Accounts and models** has **Run a live check**, which sends one short real request to each model on each job.
+
+The routes behind these screens:
 
 | Route | Does |
 | --- | --- |

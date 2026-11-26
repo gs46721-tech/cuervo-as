@@ -14,6 +14,7 @@ type Props = {
   onTheme: () => void
   onSettings: () => void
   onWorld: () => void
+  onPanel: (panel: "new" | "board" | "render") => void
   onRename: (thread: Thread, title: string) => void
   onDeleteThread: (thread: Thread) => void
   onDeleteProject: (card: SessionCard) => void
@@ -31,14 +32,31 @@ export function Sidebar(props: Props) {
         </button>
       </div>
 
-      <button className="btn wide" onClick={props.onOpen}>
-        {icons.folder} Open episode
-      </button>
+      <div className="row">
+        <button className="btn wide primary" onClick={() => props.onPanel("new")}>
+          {icons.plus} New episode
+        </button>
+        <button className="btn" title="Open an episode file" aria-label="Open an episode file" onClick={props.onOpen}>
+          {icons.folder}
+        </button>
+      </div>
 
       {state ? (
-        <button className="btn wide ghost world-btn" onClick={props.onWorld}>
-          {icons.film} World: cast and sets
-        </button>
+        <div className="side-links">
+          <button className="btn wide ghost world-btn" onClick={props.onWorld}>
+            {icons.eye} World: cast and sets
+          </button>
+          <button className="btn wide ghost world-btn" onClick={() => props.onPanel("board")}>
+            {icons.stage} Storyboard
+            <span className="muted push">
+              {state.approved_scenes.length}/{state.episode.scenes.length}
+            </span>
+          </button>
+          <button className="btn wide ghost world-btn" onClick={() => props.onPanel("render")}>
+            {icons.film} Render
+            {state.rendered ? <span className="muted push">ready</span> : null}
+          </button>
+        </div>
       ) : null}
 
       <div className="side-scroll">

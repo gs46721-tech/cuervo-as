@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   type Change,
+  type Note,
+  api,
   type LockProperty,
   type SessionState,
   type Shot,
@@ -28,7 +30,7 @@ type Props = {
   onClose: () => void
 }
 
-type Tab = "timeline" | "script" | "details"
+type Tab = "timeline" | "script" | "notes" | "details"
 
 // Decoded frames by URL. A URL carries the project version, so an entry never goes stale.
 const images = new Map<string, HTMLImageElement>()
@@ -55,6 +57,18 @@ export function Stage(props: Props) {
   const { state, shot, frame, playing, preview } = props
   const episode = state.episode
   const [tab, setTab] = useState<Tab>("timeline")
+  // What a careful watch would catch. Read again whenever the cut changes.
+  const [notes, setNotes] = useState<Note[]>([])
+  useEffect(() => {
+    let live = true
+    api
+      .notes(state.session_id)
+      .then((body) => live && setNotes(body.notes))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [state.session_id, state.version])
   const previewing = preview !== null && preview.shot_id === shot.shot_id && preview.state === "pending" && !preview.stale
   const duration = shot.duration_frames + (previewing ? preview.grow : 0)
   const current = Math.min(frame, duration - 1)
@@ -246,9 +260,10 @@ export function Stage(props: Props) {
         <ShotStrip state={state} shot={shot} frame={current} onSeek={props.onSeek} />
 
         <div className="tabs" role="tablist">
-          {(["timeline", "script", "details"] as Tab[]).map((name) => (
+          {(["timeline", "script", "notes", "details"] as Tab[]).map((name) => (
             <button key={name} role="tab" aria-selected={tab === name} onClick={() => setTab(name)}>
               {name}
+              {name === "notes" && notes.length ? <span className="count">{notes.length}</span> : null}
             </button>
           ))}
         </div>
@@ -268,6 +283,7 @@ export function Stage(props: Props) {
           />
         ) : null}
         {tab === "script" ? <Script state={state} shot={shot} onSeek={props.onSeek} /> : null}
+        {tab === "notes" ? <Notes notes={notes} shot={shot} onSeek={props.onSeek} /> : null}
         {tab === "details" ? <Details state={state} shot={shot} /> : null}
       </div>
     </aside>
@@ -557,6 +573,29 @@ function Script({ state, shot, onSeek }: { state: SessionState; shot: Shot; onSe
               <span className="muted">· {state.episode.shots.find((item) => item.shot_id === line.shot_id)?.label}</span>
             </span>
             <span>{line.text}</span>
+          </button>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function Notes({ notes, shot, onSeek }: { notes: Note[]; shot: Shot; onSeek: Props["onSeek"] }) {
+  if (!notes.length) {
+    return <p className="empty-note">Nothing to fix. The checks found no problems in this cut.</p>
+  }
+  // Problems first, then things to look at.
+  const ordered = [...notes].sort((left, right) => Number(right.severity === "fix") - Number(left.severity === "fix"))
+  return (
+    <ol className="script notes">
+      {ordered.map((note, index) => (
+        <li key={index}>
+          <button className={note.shot_id === shot.shot_id ? "selected" : ""} disabled={!note.shot_id} onClick={() => onSeek(note.shot_id, 0)}>
+            <span className="script-meta">
+              <span className={note.severity === "fix" ? "status failed" : "status pending"}>{note.severity === "fix" ? "Fix" : "Look"}</span>{" "}
+              <span className="muted">{note.shot}</span>
+            </span>
+            <span>{note.text}</span>
           </button>
         </li>
       ))}

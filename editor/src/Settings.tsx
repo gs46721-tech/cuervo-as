@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { type KeyCheck, type Role, type RoleEntry, type ServiceKey, api } from "./api"
+import { type KeyCheck, type LiveCheck, type Role, type RoleEntry, type ServiceKey, api } from "./api"
+import { useJob } from "./Studio"
 import { Spinner, icons } from "./icons"
 
 /** Where each person connects their own model and voice accounts. Keys stay on this machine. */
@@ -48,6 +49,7 @@ export function Settings({ onClose, onChanged }: { onClose: () => void; onChange
           </p>
           {error ? <p className="note error">{error}</p> : null}
           {services === null && !error ? <Spinner /> : null}
+          {services ? <LiveCheckCard /> : null}
           {services ? <h3 className="settings-group">On this computer</h3> : null}
           {services ? (
             <p className="muted">
@@ -205,6 +207,44 @@ function ServiceCard({ service, onSaved }: { service: ServiceKey; onSaved: (serv
   )
 }
 
+
+function LiveCheckCard() {
+  const check = useJob()
+  const rows = check.job?.status === "done" ? ((check.job.result.checks as LiveCheck[] | undefined) ?? []) : []
+  return (
+    <section className="service">
+      <div className="service-head">
+        <div>
+          <strong>Is everything working?</strong>
+          <span className="muted">Sends one short real request to each model on each job, and speaks three words if ElevenLabs is connected.</span>
+        </div>
+        <button className="btn small" disabled={check.job?.status === "running"} onClick={() => check.start(api.livecheck())}>
+          {check.job?.status === "running" ? <Spinner /> : null} Run a live check
+        </button>
+      </div>
+      {check.job?.status === "failed" ? <p className="note error">{check.job.error}</p> : null}
+      {rows.length ? (
+        <table className="checks">
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={index}>
+                <td>
+                  <span className={row.ok ? "status applied" : "status failed"}>{row.ok ? "Works" : "Failed"}</span>
+                </td>
+                <td>{row.job}</td>
+                <td className="muted">{row.who}</td>
+                <td className="muted">{row.detail}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      {check.job?.status === "done" && !rows.some((row) => row.job !== "Voices") ? (
+        <p className="note">No model is connected yet. Sign in to an agent on this computer, or add a key below.</p>
+      ) : null}
+    </section>
+  )
+}
 
 function LocalCard({ service, onSaved }: { service: ServiceKey; onSaved: (services: ServiceKey[]) => void }) {
   const [model, setModel] = useState(service.model)

@@ -103,6 +103,8 @@ export type SessionState = {
   has_poses: boolean
   has_takes: boolean
   has_world: boolean
+  approved_scenes: string[]
+  rendered: boolean
   version: number
   undo: number
   redo: number
@@ -138,6 +140,20 @@ export type ServiceKey = {
   needs_base: boolean
   key_url: string
 }
+
+export type Job = {
+  job_id: string
+  kind: string
+  status: "running" | "done" | "failed"
+  log: string[]
+  result: Record<string, unknown>
+  error: string | null
+  seconds: number
+}
+
+export type Note = { shot_id: string; shot: string; severity: "fix" | "look"; text: string }
+
+export type LiveCheck = { job: string; who: string; ok: boolean; detail: string; seconds: number }
 
 export type WorldAsset = {
   asset_id: string
@@ -208,6 +224,14 @@ export const api = {
   world: (id: string) => call<{ assets: WorldAsset[] }>("GET", `/api/sessions/${id}/world`),
   worldVerdict: (id: string, asset: string, verdict: "approve" | "reopen") =>
     call<{ assets: WorldAsset[] }>("POST", `/api/sessions/${id}/world/${asset}/${verdict}`),
+  job: (id: string) => call<Job>("GET", `/api/jobs/${id}`),
+  startProduction: (script: string, kit: unknown) => call<Job>("POST", "/api/productions", { script, kit }),
+  writeScript: (premise: string, kit: unknown, minutes: number) => call<Job>("POST", "/api/productions/write", { premise, kit, minutes }),
+  notes: (id: string) => call<{ notes: Note[] }>("GET", `/api/sessions/${id}/notes`),
+  approveScene: (id: string, scene: string, approved: boolean) =>
+    call<SessionState>("POST", `/api/sessions/${id}/scenes/${scene}`, { approved }),
+  render: (id: string, width: number, height: number) => call<Job>("POST", `/api/sessions/${id}/render`, { width, height }),
+  livecheck: () => call<Job>("POST", "/api/settings/livecheck"),
   roles: () => call<{ roles: Role[] }>("GET", "/api/settings/roles"),
   saveRole: (role: string, body: { entries: RoleEntry[]; compete: boolean; judge: RoleEntry | null }) =>
     call<{ roles: Role[] }>("PUT", `/api/settings/roles/${role}`, body),
@@ -250,6 +274,10 @@ export function changeFrameUrl(state: SessionState, changeId: string, frame: num
 
 export function audioUrl(state: SessionState, shotId: string): string {
   return `/api/sessions/${state.session_id}/audio/${shotId}.wav?v=${state.version}`
+}
+
+export function masterUrl(sessionId: string): string {
+  return `/api/sessions/${sessionId}/master.mp4`
 }
 
 export function exportUrl(sessionId: string): string {

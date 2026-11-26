@@ -15,7 +15,8 @@ def test_script_in_episode_open_notes_and_render_out(tmp_path):
 
     job = client.post("/api/productions", json={"script": SCRIPT, "kit": kit}).json()
     assert job["status"] == "done", job
-    assert "Recording voices and animating…" in job["log"]
+    assert "The voices are recorded and the shots are animated." in job["log"]
+    assert "Designed Ada, Bo, Workshop, Yard." in job["log"]
     session_id = job["result"]["session_id"]
     state = client.get(f"/api/sessions/{session_id}").json()
     assert state["has_takes"] and state["has_world"] and state["rendered"] is False

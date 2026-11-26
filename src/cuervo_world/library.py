@@ -126,7 +126,8 @@ class World:
         if built:
             self._save()
             if log:
-                log(f"  built {', '.join(built)}")
+                names = [self.manifest["assets"][asset_id]["name"] for asset_id in built]
+                log(f"  Designed {', '.join(names)}.")
         return built
 
     def _paint(self, folder: Path, name: str, design, bible, painters, engines, log) -> list[dict]:

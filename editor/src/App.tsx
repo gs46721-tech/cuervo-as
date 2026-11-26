@@ -16,6 +16,7 @@ import { type Command, Palette } from "./Palette"
 import { Settings } from "./Settings"
 import { Sidebar } from "./Sidebar"
 import { Stage } from "./Stage"
+import { NewEpisode, Render, Storyboard } from "./Studio"
 import { type Draft, ThreadView } from "./ThreadView"
 import { WorldView } from "./World"
 
@@ -57,6 +58,7 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [worldOpen, setWorldOpen] = useState(false)
+  const [panel, setPanel] = useState<"new" | "board" | "render" | null>(null)
   const [dropping, setDropping] = useState(false)
   const [booted, setBooted] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
@@ -412,7 +414,8 @@ export function App() {
 
   const commands: Command[] = useMemo(() => {
     const list: Command[] = [
-      { id: "open", group: "Project", label: "Open episode…", run: () => picker.current?.click() },
+      { id: "start", group: "Project", label: "New episode from a script…", run: () => setPanel("new") },
+      { id: "open", group: "Project", label: "Open an episode file…", run: () => picker.current?.click() },
       { id: "sidebar", group: "View", label: "Toggle sidebar", hint: "⌘B", run: () => setSidebarOpen((open) => !open) },
       { id: "stage", group: "View", label: "Toggle stage", hint: "⌘J", run: () => setStageOpen((open) => !open) },
       { id: "theme", group: "View", label: "Switch between dark and light", run: toggleTheme },
@@ -424,6 +427,8 @@ export function App() {
     list.unshift(
       { id: "new", group: "Project", label: "New thread", run: () => setThreadId(null) },
       { id: "world", group: "Project", label: "World: cast and sets", run: () => setWorldOpen(true) },
+      { id: "board", group: "Project", label: "Storyboard", run: () => setPanel("board") },
+      { id: "render", group: "Project", label: "Render the episode…", run: () => setPanel("render") },
       { id: "export", group: "Project", label: "Download episode JSON", run: () => window.location.assign(exportUrl(state.session_id)) },
       { id: "undo", group: "Project", label: "Undo", hint: "⌘Z", run: () => history("undo") },
       { id: "redo", group: "Project", label: "Redo", hint: "⇧⌘Z", run: () => history("redo") },
@@ -507,6 +512,7 @@ export function App() {
           onTheme={toggleTheme}
           onSettings={() => setSettingsOpen(true)}
           onWorld={() => setWorldOpen(true)}
+          onPanel={setPanel}
           onRename={(item, title) => state && void run(api.renameThread(state.session_id, item.thread_id, title))}
           onDeleteThread={(item) => {
             if (state && window.confirm(`Delete the thread "${item.title}"? Changes it already applied stay in the episode.`)) {
@@ -556,7 +562,7 @@ export function App() {
             }}
           />
         ) : booted ? (
-          <Welcome onOpen={() => picker.current?.click()} />
+          <Welcome onOpen={() => picker.current?.click()} onNew={() => setPanel("new")} />
         ) : null}
       </div>
 
@@ -582,6 +588,31 @@ export function App() {
       ) : null}
 
       {worldOpen && state ? <WorldView state={state} onClose={() => setWorldOpen(false)} onChanged={() => void run(api.read(state.session_id))} /> : null}
+      {panel === "new" ? (
+        <NewEpisode
+          onClose={() => setPanel(null)}
+          onOpened={(id) => {
+            setPanel(null)
+            refreshCards()
+            void showProject(id)
+          }}
+        />
+      ) : null}
+      {panel === "board" && state && shot ? (
+        <Storyboard
+          state={state}
+          current={shot}
+          onClose={() => setPanel(null)}
+          onShot={(id) => {
+            setStageOpen(true)
+            seek(id, 0)
+          }}
+          onState={setState}
+        />
+      ) : null}
+      {panel === "render" && state ? (
+        <Render state={state} onClose={() => setPanel(null)} onState={() => void run(api.read(state.session_id))} />
+      ) : null}
       {settingsOpen ? (
         <Settings
           onClose={() => setSettingsOpen(false)}
@@ -612,39 +643,43 @@ export function App() {
   )
 }
 
-function Welcome({ onOpen }: { onOpen: () => void }) {
+function Welcome({ onOpen, onNew }: { onOpen: () => void; onNew: () => void }) {
   return (
     <main className="welcome">
       <div className="welcome-card">
         <span className="welcome-mark">
           <Mark size={36} />
         </span>
-        <h1>Direct your episode in plain words</h1>
+        <h1>Direct your show in plain words</h1>
         <p className="muted">
-          Open an episode and tell the agent what should change. It drafts typed edits to timing, poses, and camera. You
-          see each one as a diff and a frame before it is written.
+          Bring a script. Your crew storyboards it, records the voices, and animates it with your cast and sets. Then
+          give notes the way a director would, and see each change before it goes in the cut.
         </p>
-        <button className="btn primary" onClick={onOpen}>
-          {icons.folder} Open episode JSON
-        </button>
+        <div className="row">
+          <button className="btn primary" onClick={onNew}>
+            {icons.plus} New episode from a script
+          </button>
+          <button className="btn" onClick={onOpen}>
+            {icons.folder} Open an episode file
+          </button>
+        </div>
         <p className="muted small">
-          Or drop the file anywhere on this page. If the series has a pose table, select it together with the episode.
+          Start from a script and a series file, or drop an existing episode file anywhere on this page.
         </p>
         <ol className="how">
           <li>
+            <strong>Write</strong>
+            <span>Paste a script, or give a premise and have one written.</span>
+          </li>
+          <li>
             <strong>Direct</strong>
-            <span>Type a note. Pin it to shots with @, or let the agent choose.</span>
+            <span>Approve the storyboard, then give notes shot by shot.</span>
           </li>
           <li>
-            <strong>Review</strong>
-            <span>Each change shows what moves and how the frame looks after.</span>
-          </li>
-          <li>
-            <strong>Keep or revert</strong>
-            <span>Accept, undo, or roll a whole turn back. Lock what must not move.</span>
+            <strong>Finish</strong>
+            <span>Clear the notes, render, and download the episode.</span>
           </li>
         </ol>
-        <p className="muted small mono">python3 -m cuervo_editor path/to/episode.json</p>
       </div>
     </main>
   )

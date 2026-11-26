@@ -86,11 +86,11 @@ class SceneBody(BaseModel):
 
 # What each pipeline line means to a director.
 STAGE_WORDS = {
-    "world": "Building the cast and sets",
-    "script": "Reading the script",
-    "storyboard": "Storyboarding",
-    "animation": "Recording voices and animating",
-    "polish": "Checking and rendering",
+    "world": "The cast and sets are ready.",
+    "script": "The script is read.",
+    "storyboard": "The storyboard is drawn.",
+    "animation": "The voices are recorded and the shots are animated.",
+    "polish": "Checked and rendered.",
 }
 
 
@@ -176,7 +176,7 @@ def install(app: FastAPI, *, session_of, state_of, background: bool) -> None:
 
             def log(line: str) -> None:
                 word = str(line).split(" ", 1)[0]
-                job.say(STAGE_WORDS[word] + "…" if word in STAGE_WORDS and not str(line).startswith(" ") else _plain(str(line)))
+                job.say(STAGE_WORDS[word] if word in STAGE_WORDS and not str(line).startswith(" ") else _plain(str(line)))
 
             made = produce(body.script, kit, out, router=app.state.router, through="animation", painters=painters(), log=log)
             assert made.episode is not None
