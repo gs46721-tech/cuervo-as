@@ -21,11 +21,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from cuervo_ir.credentials import CredentialError, Credentials, check
 from cuervo_ir.models import Episode, LockProperty
+from cuervo_ir.roles import ModelRoles, RoleChoice
 from cuervo_ir.providers.router import ProviderRouter, build_default_router
 from cuervo_runtime.draw import render_png
 from cuervo_pipeline.run import shot_audio
 from cuervo_voice.takes import SAMPLE_RATE
 from cuervo_world import World, WorldError
+from cuervo_world.imagegen import default_engines
 from cuervo_editor.agent import run_turn
 from cuervo_editor.store import (
     EditorError,
@@ -102,6 +104,7 @@ def create_app(
     background: bool = True,
     dist: Path | None = None,
     credentials: Credentials | None = None,
+    roles: ModelRoles | None = None,
 ) -> FastAPI:
     """`home` keeps projects on disk. `background=False` runs a turn inside the request, for tests."""
 
@@ -117,6 +120,9 @@ def create_app(
     app.state.credentials = credentials
     app.state.router = router if router is not None else default_router()
     rebuild_router = router is None
+    app.state.roles = roles
+    if roles is not None:
+        roles.apply(app.state.router)
 
     def state(session: Session, **extra) -> dict:
         with session.lock:
@@ -138,7 +144,38 @@ def create_app(
     def changed() -> dict:
         if rebuild_router:
             app.state.router = default_router()
+        if app.state.roles is not None:
+            app.state.roles.apply(app.state.router)
         return {"services": keys().view()}
+
+    def roles_view() -> dict:
+        if app.state.roles is None:
+            raise HTTPException(404, "this editor was started without a models file")
+        router_: ProviderRouter = app.state.router
+        writers = [{"name": name, "available": provider.available()} for name, provider in router_.providers.items()]
+        painters = [{"name": name, "available": engine.available(), "model": engine.default_model} for name, engine in default_engines().items()]
+        rows = app.state.roles.view(router_)
+        for row in rows:
+            row["choices"] = painters if row["role"] == "image" else writers
+        return {"roles": rows}
+
+    @app.get("/api/settings/roles")
+    def list_roles():
+        return roles_view()
+
+    @app.put("/api/settings/roles/{role}")
+    def save_role(role: str, body: RoleChoice):
+        view = roles_view()
+        known = {item["name"] for row in view["roles"] if row["role"] == role for item in row["choices"]}
+        if not known:
+            raise HTTPException(404, "unknown role")
+        for entry in [*body.entries, *([body.judge] if body.judge else [])]:
+            allowed = known if entry in body.entries else set(app.state.router.providers)
+            if entry.provider not in allowed:
+                raise HTTPException(422, f"{entry.provider} cannot do that")
+        app.state.roles.set(role, body)
+        app.state.roles.apply(app.state.router)
+        return roles_view()
 
     @app.get("/api/settings/keys")
     def list_keys():
@@ -262,6 +299,30 @@ def create_app(
         if path is None:
             raise HTTPException(404, "no art for that asset")
         return Response(content=path.read_bytes(), media_type="image/png", headers={"cache-control": "no-store"})
+
+    @app.get("/api/sessions/{session_id}/world/{asset_id}/candidates/{index}.png")
+    def world_candidate(session_id: str, asset_id: str, index: int):
+        world = world_of(_session(app, session_id))
+        path = world.candidate_path(asset_id, index) if world else None
+        if path is None:
+            raise HTTPException(404, "no such picture")
+        return Response(content=path.read_bytes(), media_type="image/png", headers={"cache-control": "no-store"})
+
+    @app.post("/api/sessions/{session_id}/world/{asset_id}/choose/{index}")
+    def world_choose(session_id: str, asset_id: str, index: int):
+        session = _session(app, session_id)
+        world = world_of(session)
+        if world is None:
+            raise HTTPException(404, "this project has no world")
+        try:
+            world.choose(asset_id, index)
+        except WorldError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        with session.lock:
+            # The picture behind every shot on this set changed, so the page must fetch frames again.
+            session.version += 1
+            app.state.store.save(session)
+        return {"assets": world.view()}
 
     @app.post("/api/sessions/{session_id}/world/{asset_id}/{verdict}")
     def world_approve(session_id: str, asset_id: str, verdict: str):
@@ -440,7 +501,8 @@ def create_app(
 
 
 def default_router() -> ProviderRouter:
-    router = build_default_router()
+    # Roles are applied by the app, from its own models file.
+    router = build_default_router(roles=False)
     if os.environ.get("CUERVO_EDITOR_STUB") == "1":
         router.register(
             DevStub(),
@@ -489,7 +551,7 @@ def _png(episode: Episode, shot_id: str, frame: int, poses, cache: bool = False,
 def __getattr__(name: str):
     # `cuervo_editor.api:app` is built on first use, so importing this module reads no disk.
     if name == "app":
-        application = create_app(home=default_home(), credentials=Credentials())
+        application = create_app(home=default_home(), credentials=Credentials(), roles=ModelRoles())
         globals()["app"] = application
         return application
     raise AttributeError(name)

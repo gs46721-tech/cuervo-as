@@ -70,6 +70,38 @@ export function WorldView({ state, onClose, onChanged }: { state: SessionState; 
                       alt={asset.kind === "character" ? `Model sheet for ${asset.name}` : `The ${asset.name} set`}
                       loading="lazy"
                     />
+                    {asset.candidates && asset.candidates.length > 1 ? (
+                      <div className="candidates">
+                        {asset.candidates.map((candidate, index) => (
+                          <button
+                            key={candidate.file}
+                            className={index === asset.chosen ? "candidate chosen" : "candidate"}
+                            disabled={asset.status === "approved" || index === asset.chosen}
+                            title={asset.status === "approved" ? "Reopen the set to pick another picture" : "Use this picture for the set"}
+                            onClick={() =>
+                              api
+                                .worldChoose(state.session_id, asset.asset_id, index)
+                                .then((body) => {
+                                  setAssets(body.assets)
+                                  setStamp(Date.now())
+                                  onChanged()
+                                })
+                                .catch((reason: Error) => setError(reason.message))
+                            }
+                          >
+                            <img
+                              src={`/api/sessions/${state.session_id}/world/${asset.asset_id}/candidates/${index}.png`}
+                              alt={`Painted by ${candidate.by}`}
+                              loading="lazy"
+                            />
+                            <span>
+                              {candidate.by}
+                              {index === asset.chosen ? " · in use" : ""}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                     <footer>
                       <div>
                         <strong>{asset.name}</strong>

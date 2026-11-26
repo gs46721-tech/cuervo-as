@@ -177,6 +177,8 @@ def _ask_director(scene: ScriptScene, cast: list[str], kit: SeriesKit, router: P
                     "bible": kit.bible,
                 }
             ),
+            # In a contest, a board that drops or repeats a line loses before any judging.
+            check=lambda text: _covers(text, len(lines)),
         )
     )
     text = response.text.strip()
@@ -200,6 +202,14 @@ def _ask_director(scene: ScriptScene, cast: list[str], kit: SeriesKit, router: P
     if not shots:
         raise BoardError(f"{response.provider} returned no shots")
     return {"objective": reply.objective, "emotional_trajectory": reply.emotional_trajectory, "shots": shots}
+
+
+def _covers(text: str, count: int) -> bool:
+    body = text.strip()
+    if body.startswith("```"):
+        body = body.split("\n", 1)[1].rsplit("```", 1)[0]
+    reply = _Reply.model_validate(json.loads(body))
+    return [index for shot in reply.shots for index in shot.lines] == list(range(count))
 
 
 def _numbered(scene: ScriptScene) -> list[dict]:

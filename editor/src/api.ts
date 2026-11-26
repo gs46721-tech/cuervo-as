@@ -88,6 +88,7 @@ export type Turn = {
   status: "running" | "done" | "failed" | "stopped"
   reply: string
   error: string | null
+  contests: string[]
   steps: Step[]
   changes: Change[]
   created_at: number
@@ -142,9 +143,25 @@ export type WorldAsset = {
   digest: string
   status: "draft" | "approved"
   source: string
+  /** Pictures different models painted for a set. One of them is in use. */
+  candidates?: { file: string; by: string }[]
+  chosen?: number
 }
 
-export type KeyCheck = { ok: boolean; message: string; voices?: { voice_id: string; name: string }[] }
+export type KeyCheck = { ok: boolean; message: string; models?: string[]; voices?: { voice_id: string; name: string }[] }
+
+export type RoleEntry = { provider: string; model: string }
+
+export type Role = {
+  role: string
+  label: string
+  help: string
+  custom: boolean
+  entries: RoleEntry[]
+  compete: boolean
+  judge: RoleEntry | null
+  choices: { name: string; available: boolean; model?: string }[]
+}
 
 async function readError(response: Response): Promise<string> {
   try {
@@ -187,6 +204,11 @@ export const api = {
   world: (id: string) => call<{ assets: WorldAsset[] }>("GET", `/api/sessions/${id}/world`),
   worldVerdict: (id: string, asset: string, verdict: "approve" | "reopen") =>
     call<{ assets: WorldAsset[] }>("POST", `/api/sessions/${id}/world/${asset}/${verdict}`),
+  roles: () => call<{ roles: Role[] }>("GET", "/api/settings/roles"),
+  saveRole: (role: string, body: { entries: RoleEntry[]; compete: boolean; judge: RoleEntry | null }) =>
+    call<{ roles: Role[] }>("PUT", `/api/settings/roles/${role}`, body),
+  worldChoose: (id: string, asset: string, index: number) =>
+    call<{ assets: WorldAsset[] }>("POST", `/api/sessions/${id}/world/${asset}/choose/${index}`),
   keys: () => call<{ services: ServiceKey[] }>("GET", "/api/settings/keys"),
   saveKey: (name: string, body: { api_key?: string; model?: string; base_url?: string }) =>
     call<{ services: ServiceKey[] }>("PUT", `/api/settings/keys/${name}`, body),

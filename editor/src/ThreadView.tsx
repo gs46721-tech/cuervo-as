@@ -163,6 +163,23 @@ function TurnBlock(props: Props & { turn: Turn; onRetry: (change: Change) => voi
         ) : null}
 
         {turn.reply ? <p className="reply-text">{turn.reply}</p> : null}
+        {turn.contests.length ? (
+          <details className="worklog contest">
+            <summary>
+              {icons.chevron}
+              <span>
+                {turn.contests.length === 1 ? "Models competed on this note" : `Models competed ${turn.contests.length} times on this note`}
+              </span>
+            </summary>
+            <ol>
+              {turn.contests.map((sentence, index) => (
+                <li key={index} className="step">
+                  <span>{sentence}</span>
+                </li>
+              ))}
+            </ol>
+          </details>
+        ) : null}
         {turn.status === "stopped" ? <p className="note">{turn.error ?? "Stopped."}</p> : null}
         {turn.status === "failed" ? (
           <div className="note error">

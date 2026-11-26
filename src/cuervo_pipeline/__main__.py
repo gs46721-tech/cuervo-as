@@ -4,6 +4,7 @@ from pathlib import Path
 
 from cuervo_ir.credentials import Credentials
 from cuervo_ir.models import Episode
+from cuervo_ir.roles import ModelRoles, RoleChoice
 from cuervo_ir.providers.router import build_default_router
 from cuervo_voice.dub import VoiceProfile
 from cuervo_pipeline.plan import plan_script
@@ -65,6 +66,7 @@ def main() -> None:
                 director=not args.no_director,
                 review=not args.no_review,
                 world_dir=args.world,
+                painters=[(item.provider, item.model) for item in (ModelRoles().choices.get("image") or RoleChoice()).entries],
                 size=tuple(int(part) for part in args.size.lower().split("x")),  # type: ignore[arg-type]
             )
         except (ProduceError, ScriptError) as exc:

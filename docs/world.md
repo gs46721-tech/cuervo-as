@@ -45,8 +45,16 @@ Nothing in a frame is generated. The same head and the same hands appear every t
 
 ## Bringing your own art
 
-The built-in art is the house style: flat color and one even line, drawn from the design by code. No model call is involved.
+The built-in art is the house style: flat color and one even line, drawn from the design by code.
 
 To use art from an illustrator or an image model, replace the PNG files in a character's version folder. Keep each part's size and pivot as `rig.json` gives them, or edit `rig.json` to match. Do this while the asset is a draft, then approve it.
 
-Cuervo does not call an image model to generate art. Only the three-quarter view is built. Front, side, and back views are not.
+## Painted sets
+
+Put one or more models on the **Image generation** role and every new set is also painted by an image model. Gemini and OpenAI image models are supported. The set's design becomes one prompt: the house rules for a background plate, the description, the colors, the time of day, and where the furniture goes. Every model gets the same prompt.
+
+Each picture is cropped to 16:9 and kept beside the house-style plate. The first painted picture is used until someone picks another on the World screen. Picking a different picture redraws the shots on that set. An approved set must be reopened before its picture can change.
+
+Characters are not painted. They are built from parts so they can be animated and stay on model.
+
+The two image adapters are tested against the documented response shapes. They have not been run against a live account from this repo. Only the three-quarter view of a character is built. Front, side, and back views are not.

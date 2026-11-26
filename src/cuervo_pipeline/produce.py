@@ -92,6 +92,7 @@ def produce(
     synths: dict[str, VoiceSynth] | None = None,
     world_dir: Path | None = None,
     size: tuple[int, int] | None = None,
+    painters: list[tuple[str, str]] | None = None,
     log=print,
 ) -> Production:
     """Run the stages up to `through`. `approved=None` approves every shot for render."""
@@ -109,7 +110,7 @@ def produce(
     started = time.time()
     world = World(world_dir or out_dir / "world")
     try:
-        world.build(kit, log=log)
+        world.build(kit, log=log, painters=painters)
     except WorldError as exc:
         raise ProduceError(str(exc)) from exc
     result.world = world
@@ -214,6 +215,11 @@ def produce(
         final = out_dir / "episode.mp4"
         result.render.master.replace(final)
         result.render.master = final
+    if router is not None and router.contests:
+        wins: dict[str, int] = {}
+        for contest in router.contests:
+            wins[contest.winner] = wins.get(contest.winner, 0) + 1
+        log("contests    " + ", ".join(f"{name} won {count}" for name, count in sorted(wins.items(), key=lambda item: -item[1])))
     fixes = sum(1 for note in notes if note.severity == "fix")
     log(f"polish      {fixes} to fix, {len(notes) - fixes} to look at, master: {result.render.master}  ({time.time() - started:.1f}s)")
     return result

@@ -35,6 +35,16 @@ SERVICES: dict[str, dict] = {
         "needs_base": False,
         "key_url": "https://aistudio.google.com/apikey",
     },
+    "openai": {
+        "label": "OpenAI",
+        "role": "Another writer, director, or judge, and an image model for sets",
+        "key": "OPENAI_API_KEY",
+        "model": "OPENAI_MODEL",
+        "base": "OPENAI_BASE_URL",
+        "default_base": "https://api.openai.com/v1",
+        "needs_base": False,
+        "key_url": "https://platform.openai.com/api-keys",
+    },
     "cursor": {
         "label": "Cursor",
         "role": "Any OpenAI-compatible chat endpoint you already use",
@@ -188,7 +198,7 @@ def check(name: str, fetch=None) -> dict:
         body = (fetch or _get)(url, headers)
     except CredentialError as exc:
         return {"ok": False, "message": str(exc)}
-    result: dict = {"ok": True, "message": "Connected."}
+    result: dict = {"ok": True, "message": "Connected.", "models": _model_ids(name, body)}
     if name == "elevenlabs" and isinstance(body, dict):
         voices = [
             {"voice_id": str(item.get("voice_id", "")), "name": str(item.get("name", ""))}
@@ -198,6 +208,21 @@ def check(name: str, fetch=None) -> dict:
         result["voices"] = voices
         result["message"] = f"Connected. {len(voices)} voices on this account."
     return result
+
+
+def _model_ids(name: str, body) -> list[str]:
+    """The model names a service says this key can use, for the pickers on the settings page."""
+
+    if name == "elevenlabs" or not isinstance(body, dict):
+        return []
+    rows = body.get("models") if name == "gemini" else body.get("data")
+    found = []
+    for item in rows or []:
+        if isinstance(item, dict):
+            value = str(item.get("name") if name == "gemini" else item.get("id") or "")
+            if value:
+                found.append(value.removeprefix("models/"))
+    return sorted(found)
 
 
 def _get(url: str, headers: dict[str, str]) -> dict:

@@ -86,6 +86,7 @@ def run_turn(session: Session, thread: Thread, turn: Turn, router: ProviderRoute
                         step="editor_assist",
                         system=SYSTEM,
                         user=json.dumps(_brief(base, working, thread, turn, focus, transcript)),
+                        check=_reads_as_cues,
                     ),
                     only=turn.provider,
                 )
@@ -94,6 +95,8 @@ def run_turn(session: Session, thread: Thread, turn: Turn, router: ProviderRoute
                 raise
             with session.lock:
                 turn.steps.pop()
+                if response.contest is not None:
+                    turn.contests.append(response.contest.sentence())
             try:
                 cues = cue_language.parse(response.text)
             except CueError as exc:
@@ -184,6 +187,13 @@ def run_turn(session: Session, thread: Thread, turn: Turn, router: ProviderRoute
             turn.finished_at = time.time()
             session.stop_requests.discard(turn.turn_id)
             store.save(session)
+
+
+def _reads_as_cues(text: str) -> bool:
+    try:
+        return bool(cue_language.parse(text))
+    except CueError:
+        return False
 
 
 def _brief(base: Episode, working: Episode, thread: Thread, turn: Turn, focus: str, transcript: list[str]) -> dict:

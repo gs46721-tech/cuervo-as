@@ -21,8 +21,9 @@ class ClaudeProvider:
         return bool(self.api_key)
 
     def complete(self, request: ModelRequest) -> ModelResponse:
+        model = request.model or self.model
         body = {
-            "model": self.model,
+            "model": model,
             "max_tokens": 4096,
             "system": request.system,
             "messages": [{"role": "user", "content": schema_note(request)}],
@@ -37,4 +38,4 @@ class ClaudeProvider:
             text = payload["content"][0]["text"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError("claude response had no text") from exc
-        return finish(self.name, self.model, text)
+        return finish(self.name, model, text)

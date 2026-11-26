@@ -84,8 +84,13 @@ class World:
 
     # -- building -----------------------------------------------------------
 
-    def build(self, kit, *, log=None) -> list[str]:
-        """Make the art the kit asks for and does not have yet. Returns the ids that were built."""
+    def build(self, kit, *, log=None, painters: list | None = None, engines: dict | None = None) -> list[str]:
+        """Make the art the kit asks for and does not have yet. Returns the ids that were built.
+
+        `painters` is the image role: `(provider, model)` pairs. With one or more, each paints
+        every new set from the same prompt. The first picture that arrives is used until someone
+        picks another. With none, sets are drawn in the house style.
+        """
 
         built: list[str] = []
         for character in kit.characters:
@@ -106,7 +111,16 @@ class World:
             if self._claim(item.asset_id, "set", item.version, digest(design), item.display_name):
                 folder = self.path / "sets" / item.asset_id / item.version
                 folder.mkdir(parents=True, exist_ok=True)
-                set_plate(design).save(folder / "plate.png")
+                # The house plate is always kept, as the fallback and as one of the choices.
+                set_plate(design).save(folder / "house.png")
+                candidates = [{"file": "house.png", "by": "house style"}]
+                candidates += self._paint(folder, item.display_name, design, kit.bible, painters or [], engines, log)
+                entry = self.manifest["assets"][item.asset_id]
+                entry["candidates"] = candidates
+                # A painted picture is preferred over the house plate when there is one.
+                entry["chosen"] = 1 if len(candidates) > 1 else 0
+                entry["source"] = candidates[entry["chosen"]]["by"]
+                Image.open(folder / candidates[entry["chosen"]]["file"]).save(folder / "plate.png")
                 self._plates.pop((item.asset_id, item.version), None)
                 built.append(item.asset_id)
         if built:
@@ -114,6 +128,57 @@ class World:
             if log:
                 log(f"  built {', '.join(built)}")
         return built
+
+    def _paint(self, folder: Path, name: str, design, bible, painters, engines, log) -> list[dict]:
+        from cuervo_world.imagegen import ImageError, default_engines, set_prompt, to_plate
+
+        engines = engines if engines is not None else default_engines()
+        prompt = set_prompt(name, design, bible)
+        made: list[dict] = []
+        for provider, model in painters:
+            engine = engines.get(provider)
+            if engine is None or not engine.available():
+                if log:
+                    log(f"  {name}: {provider} is not connected, so it did not paint")
+                continue
+            try:
+                picture = to_plate(engine.paint(prompt, model or None))
+            except ImageError as exc:
+                if log:
+                    log(f"  {name}: {provider} could not paint it ({exc})")
+                continue
+            file = f"painted-{len(made) + 1}.png"
+            picture.save(folder / file)
+            made.append({"file": file, "by": f"{provider} {model or engine.default_model}"})
+        return made
+
+    def choose(self, asset_id: str, index: int) -> None:
+        """Use another candidate as the set's plate. Only while the set is a draft."""
+
+        entry = self.entry(asset_id)
+        if entry is None or entry["kind"] != "set":
+            raise WorldError(f"{asset_id} is not a set in the world")
+        if entry["status"] == "approved":
+            raise WorldError(f"{entry['name']} is approved. Reopen it to pick another picture.")
+        candidates = entry.get("candidates") or []
+        if not 0 <= index < len(candidates):
+            raise WorldError("there is no such picture")
+        folder = self.path / "sets" / asset_id / entry["version"]
+        Image.open(folder / candidates[index]["file"]).save(folder / "plate.png")
+        entry["chosen"] = index
+        entry["source"] = candidates[index]["by"]
+        # A different picture is a different look, so shots that use it are drawn again.
+        entry["digest"] = f"{entry['digest'].split('+')[0]}+{index}"
+        self._plates.pop((asset_id, entry["version"]), None)
+        self._save()
+
+    def candidate_path(self, asset_id: str, index: int) -> Path | None:
+        entry = self.entry(asset_id)
+        candidates = (entry or {}).get("candidates") or []
+        if entry is None or not 0 <= index < len(candidates):
+            return None
+        path = self.path / "sets" / asset_id / entry["version"] / candidates[index]["file"]
+        return path if path.is_file() else None
 
     def approve(self, asset_id: str, approved: bool = True) -> None:
         entry = self.entry(asset_id)
@@ -127,7 +192,7 @@ class World:
 
         entry = self.entry(asset_id)
         if entry is not None and entry["version"] == version:
-            if entry["digest"] == look:
+            if entry["digest"].split("+")[0] == look:
                 return False
             if entry["status"] == "approved":
                 raise WorldError(

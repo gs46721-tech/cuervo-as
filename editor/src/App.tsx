@@ -581,7 +581,7 @@ export function App() {
         />
       ) : null}
 
-      {worldOpen && state ? <WorldView state={state} onClose={() => setWorldOpen(false)} onChanged={() => undefined} /> : null}
+      {worldOpen && state ? <WorldView state={state} onClose={() => setWorldOpen(false)} onChanged={() => void run(api.read(state.session_id))} /> : null}
       {settingsOpen ? (
         <Settings
           onClose={() => setSettingsOpen(false)}

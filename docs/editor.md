@@ -17,11 +17,13 @@ For UI work, run `python3 -m cuervo_editor` and `cd editor && npm run dev`, then
 
 `CUERVO_EDITOR_STUB=1` registers a local `devstub` provider in front of the agent routes, so the page can be tried without API keys. It matches keywords and does not understand the direction. Leave it unset when Claude, Gemini, or Cursor credentials are available.
 
-## Accounts and keys
+## Accounts and models
 
-Each person connects their own accounts in the editor: click the provider list at the bottom of the sidebar. Claude, Gemini, any OpenAI-compatible endpoint, and ElevenLabs each take an API key, and optionally a model. **Save and test** makes one small read-only request to check the key.
+Each person connects their own accounts in the editor: click the provider list at the bottom of the sidebar. Claude, Gemini, OpenAI, any OpenAI-compatible endpoint, and ElevenLabs each take an API key, and optionally a model. **Save and test** makes one small read-only request to check the key.
 
 Keys are saved to `~/.cuervo/keys.json`, readable only by that user. `CUERVO_KEYS_FILE` moves the file. The API never returns a whole key. A saved key wins over one exported in the shell, and the pipeline commands read the same file. These are API keys. Signing in with a vendor account is not supported.
+
+The **Who does what** tab gives each job its own models: orchestration, screenwriting, direction, review, voice direction, and image generation. A job with two or more models can take turns or compete. See [providers.md](providers.md).
 
 ## The page
 

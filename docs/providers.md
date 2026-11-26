@@ -29,3 +29,35 @@ The process environment supplies keys. The repo never stores them.
 | Cursor | `CURSOR_API_KEY` and `CURSOR_API_BASE` | `CURSOR_MODEL` (default `composer-2.5`) |
 
 Cursor has no assumed host. Set `CURSOR_API_BASE` to the OpenAI-compatible chat-completions base you already use. Until both the key and the base are set, that provider is skipped and the route falls through.
+
+OpenAI is a fourth provider: `OPENAI_API_KEY`, and optionally `OPENAI_BASE_URL`. It has no default model, so give it one in each role you put it on, or set `OPENAI_MODEL`.
+
+## A model for each job
+
+The routes above are the defaults. Each person can change them in the editor under **Accounts and models**, on the **Who does what** tab. The choice is saved to `~/.cuervo/models.json` (`CUERVO_MODELS_FILE` moves it), and the pipeline commands read the same file.
+
+| Role | Step | What it does |
+| --- | --- | --- |
+| Orchestration | `editor_assist` | Runs the editor: reads notes, looks through the episode, makes the changes |
+| Screenwriting | `writing` | Outlines an episode and writes its scenes |
+| Direction | `direction` | Storyboards scenes and chooses the acting |
+| Review | `review` | Gives notes on scenes, and judges contests by default |
+| Voice direction | `voice_prep` | Emotion and pronunciation for a line |
+| Image generation | `image` | Paints set backgrounds |
+
+A role holds a list of entries. An entry is a provider and, optionally, one of its models. The same provider can appear twice with two different models.
+
+## Taking turns, or competing
+
+**Take turns** uses the first entry that is connected. The next one steps in only if it fails.
+
+**Compete** sends the request to every connected entry at once.
+
+1. An answer in the wrong form is dropped. The editor checks that a reply parses as cues. The storyboard checks that every line is covered once and in order.
+2. If one answer is left, it wins.
+3. Otherwise a judge reads the task and the answers and names the best one, with a one-sentence reason. The judge is the role's own judge if it has one, else the review model. A judge that did not write an answer is tried first.
+4. If no judge can answer, the first entry stands.
+
+A contest costs one call per entry, plus one for the judge. In the editor, a turn shows who won each round and why. `produce` prints how many contests each model won.
+
+For images there is no judge. Every image model paints each new set from the same prompt, and a person picks one on the World screen.

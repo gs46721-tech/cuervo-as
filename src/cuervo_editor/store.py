@@ -65,6 +65,8 @@ class Turn(BaseModel):
     status: TurnStatus = "running"
     reply: str = ""
     error: str | None = None
+    # When several models competed on this turn: who won each round, and why.
+    contests: list[str] = Field(default_factory=list)
     steps: list[Step] = Field(default_factory=list)
     changes: list[Change] = Field(default_factory=list)
     created_at: float = Field(default_factory=time.time)

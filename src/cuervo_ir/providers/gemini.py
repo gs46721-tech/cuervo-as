@@ -27,10 +27,11 @@ class GeminiProvider:
             "systemInstruction": {"parts": [{"text": request.system}]},
             "contents": [{"role": "user", "parts": [{"text": schema_note(request)}]}],
         }
-        url = f"{self.base_url}/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+        model = request.model or self.model
+        url = f"{self.base_url}/v1beta/models/{model}:generateContent?key={self.api_key}"
         payload = self.transport(url, {}, body) if self.transport else post_json(url, {}, body)
         try:
             text = payload["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError("gemini response had no text") from exc
-        return finish(self.name, self.model, text)
+        return finish(self.name, model, text)

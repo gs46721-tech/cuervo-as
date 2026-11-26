@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react"
-import { type KeyCheck, type ServiceKey, api } from "./api"
+import { type KeyCheck, type Role, type RoleEntry, type ServiceKey, api } from "./api"
 import { Spinner, icons } from "./icons"
 
 /** Where each person connects their own model and voice accounts. Keys stay on this machine. */
 export function Settings({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [services, setServices] = useState<ServiceKey[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<"accounts" | "roles">("accounts")
 
   useEffect(() => {
     api.keys().then((body) => setServices(body.services)).catch((reason: Error) => setError(reason.message))
@@ -22,16 +23,25 @@ export function Settings({ onClose, onChanged }: { onClose: () => void; onChange
 
   return (
     <div className="scrim" onMouseDown={onClose}>
-      <div className="settings" role="dialog" aria-label="Accounts and keys" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="settings" role="dialog" aria-label="Accounts and models" onMouseDown={(event) => event.stopPropagation()}>
         <header className="pane-head">
           <div className="pane-title">
-            <strong>Accounts and keys</strong>
+            <strong>Accounts and models</strong>
           </div>
           <button className="icon-btn" aria-label="Close" onClick={onClose}>
             {icons.close}
           </button>
         </header>
-        <div className="settings-body">
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "accounts"} onClick={() => setTab("accounts")}>
+            Accounts
+          </button>
+          <button role="tab" aria-selected={tab === "roles"} onClick={() => setTab("roles")}>
+            Who does what
+          </button>
+        </div>
+        {tab === "roles" ? <Roles services={services ?? []} onChanged={onChanged} /> : null}
+        <div className="settings-body" hidden={tab !== "accounts"}>
           <p className="muted">
             Connect your own accounts. Keys are saved in a private file on this computer and are sent only to the
             service they belong to. They are never put in an episode or shown again in full.
@@ -170,6 +180,205 @@ function ServiceCard({ service, onSaved }: { service: ServiceKey; onSaved: (serv
           </ul>
         </details>
       ) : null}
+    </form>
+  )
+}
+
+
+/** Pick the models for each job, and whether they take turns or compete. */
+function Roles({ services, onChanged }: { services: ServiceKey[]; onChanged: () => void }) {
+  const [roles, setRoles] = useState<Role[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [models, setModels] = useState<Record<string, string[]>>({})
+
+  useEffect(() => {
+    api.roles().then((body) => setRoles(body.roles)).catch((reason: Error) => setError(reason.message))
+  }, [])
+  // Ask each connected account which models it has, to offer them as you type.
+  const connected = services.filter((item) => item.connected && item.name !== "elevenlabs").map((item) => item.name).join(",")
+  useEffect(() => {
+    for (const name of connected.split(",").filter(Boolean)) {
+      api
+        .testKey(name)
+        .then((result) => setModels((current) => ({ ...current, [name]: result.models ?? [] })))
+        .catch(() => undefined)
+    }
+  }, [connected])
+
+  return (
+    <div className="settings-body">
+      <p className="muted">
+        Give each job to the model that is best at it. Put more than one model on a job and they can take turns, or
+        compete: each one does the work and the best result is kept.
+      </p>
+      {error ? <p className="note error">{error}</p> : null}
+      {roles === null && !error ? <Spinner /> : null}
+      {roles?.map((role) => (
+        <RoleCard
+          key={role.role + JSON.stringify(role.entries) + role.compete + JSON.stringify(role.judge)}
+          role={role}
+          models={models}
+          judges={roles.find((item) => item.role === "review")?.choices ?? []}
+          onSaved={(next) => {
+            setRoles(next)
+            onChanged()
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function RoleCard({
+  role,
+  models,
+  judges,
+  onSaved,
+}: {
+  role: Role
+  models: Record<string, string[]>
+  judges: Role["choices"]
+  onSaved: (roles: Role[]) => void
+}) {
+  const [entries, setEntries] = useState<RoleEntry[]>(role.entries)
+  const [compete, setCompete] = useState(role.compete)
+  const [judge, setJudge] = useState<RoleEntry | null>(role.judge)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const image = role.role === "image"
+  const dirty =
+    JSON.stringify(entries) !== JSON.stringify(role.entries) || compete !== role.compete || JSON.stringify(judge) !== JSON.stringify(role.judge)
+
+  const save = (body: { entries: RoleEntry[]; compete: boolean; judge: RoleEntry | null }) => {
+    setBusy(true)
+    setError(null)
+    api
+      .saveRole(role.role, body)
+      .then((result) => onSaved(result.roles))
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setBusy(false))
+  }
+  const change = (index: number, patch: Partial<RoleEntry>) =>
+    setEntries(entries.map((entry, position) => (position === index ? { ...entry, ...patch } : entry)))
+
+  return (
+    <form
+      className="service"
+      onSubmit={(event) => {
+        event.preventDefault()
+        save({ entries, compete: compete && entries.length > 1, judge: compete && !image ? judge : null })
+      }}
+    >
+      <div className="service-head">
+        <div>
+          <strong>{role.label}</strong>
+          <span className="muted">{role.help}</span>
+        </div>
+        <span className="status">{role.custom ? "Your choice" : "Default"}</span>
+      </div>
+      {entries.length === 0 ? (
+        <p className="muted">{image ? "No image model. Sets are drawn in the built-in house style." : "No model chosen."}</p>
+      ) : null}
+      {entries.map((entry, index) => {
+        const choice = role.choices.find((item) => item.name === entry.provider)
+        return (
+          <div className="role-row" key={index}>
+            <span className="muted">{compete && entries.length > 1 ? "•" : `${index + 1}.`}</span>
+            <select aria-label="Account" value={entry.provider} onChange={(event) => change(index, { provider: event.target.value, model: "" })}>
+              {role.choices.map((item) => (
+                <option key={item.name} value={item.name}>
+                  {item.name}
+                  {item.available ? "" : " (not connected)"}
+                </option>
+              ))}
+            </select>
+            <input
+              aria-label="Model"
+              list={`models-${role.role}-${index}`}
+              value={entry.model}
+              placeholder={choice?.model ? `Default (${choice.model})` : "Default model"}
+              spellCheck={false}
+              onChange={(event) => change(index, { model: event.target.value })}
+            />
+            <datalist id={`models-${role.role}-${index}`}>
+              {(models[entry.provider] ?? []).map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+            <button type="button" className="icon-btn" title="Remove" onClick={() => setEntries(entries.filter((_, position) => position !== index))}>
+              {icons.close}
+            </button>
+          </div>
+        )
+      })}
+      <div className="service-foot">
+        <button
+          type="button"
+          className="btn small"
+          disabled={entries.length >= 6 || role.choices.length === 0}
+          onClick={() => setEntries([...entries, { provider: role.choices.find((item) => item.available)?.name ?? role.choices[0].name, model: "" }])}
+        >
+          {icons.plus} Add a model
+        </button>
+        <div className="segmented" role="group" aria-label="How the models share the job">
+          <button type="button" aria-pressed={!compete} title="Use the first one. The next steps in only if it fails." onClick={() => setCompete(false)}>
+            Take turns
+          </button>
+          <button
+            type="button"
+            aria-pressed={compete}
+            disabled={entries.length < 2}
+            title={image ? "Each model paints the set and you pick in World" : "Each model does the work and a judge keeps the best"}
+            onClick={() => setCompete(true)}
+          >
+            Compete
+          </button>
+        </div>
+      </div>
+      {compete && entries.length > 1 && !image ? (
+        <div className="role-row">
+          <span className="muted">Judge</span>
+          <select
+            aria-label="Judge"
+            value={judge?.provider ?? ""}
+            onChange={(event) => setJudge(event.target.value ? { provider: event.target.value, model: "" } : null)}
+          >
+            <option value="">The review model</option>
+            {judges.map((item) => (
+              <option key={item.name} value={item.name}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <input
+            aria-label="Judge model"
+            value={judge?.model ?? ""}
+            disabled={!judge}
+            placeholder="Default model"
+            spellCheck={false}
+            onChange={(event) => judge && setJudge({ ...judge, model: event.target.value })}
+          />
+          <span />
+        </div>
+      ) : null}
+      {compete && entries.length > 1 ? (
+        <p className="muted">
+          {image
+            ? "Every model paints each new set. You pick the one to use in World."
+            : "Every model answers. Answers in the wrong form are dropped, and the judge keeps the best of the rest. This costs one call per model, plus the judge."}
+        </p>
+      ) : null}
+      <div className="service-foot">
+        <button type="submit" className="btn small primary" disabled={busy || !dirty}>
+          {busy ? <Spinner /> : null} Save
+        </button>
+        {role.custom ? (
+          <button type="button" className="btn small ghost" disabled={busy} onClick={() => save({ entries: [], compete: false, judge: null })}>
+            Back to default
+          </button>
+        ) : null}
+      </div>
+      {error ? <p className="note error">{error}</p> : null}
     </form>
   )
 }
