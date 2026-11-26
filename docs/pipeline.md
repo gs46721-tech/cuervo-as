@@ -1,6 +1,6 @@
 # Episode pipeline
 
-A script becomes a finished episode in four stages. Each stage writes a file, and that file is the gate for the next stage. The script, the series kit, and the approvals are inputs. None of them are built into the runner.
+A script becomes a finished episode in four stages, after the world is built. Each stage writes a file, and that file is the gate for the next stage. The script, the series kit, and the approvals are inputs. None of them are built into the runner.
 
 ```bash
 python3 -m cuervo_pipeline produce script.txt --series series.json --out build/
@@ -8,6 +8,7 @@ python3 -m cuervo_pipeline produce script.txt --series series.json --out build/
 
 | Stage | Writes | What happens |
 | --- | --- | --- |
+| world | `world/` | Every character and set in the kit is built once from its design. See [world.md](world.md). |
 | script | `script.json` | The screenplay is read into scenes, lines, and action. No model call, so no line is lost. |
 | storyboard | `storyboard.json` | The `direction` route cuts each scene into shots and says who each shot is on. |
 | animation | `takes/`, `episode.json`, `poses.json`, `boards/` | Every line is recorded. Shots are timed to the takes. Lip sync, acting, eyelines, and blinks are laid in. |
@@ -47,12 +48,10 @@ Acting comes from the `direction` route, one scene per call: a gesture and an ex
 
 Rendered shots are cached by a hash of the shot and the pose table, in `shots/cache.json`. A later run draws only the shots that changed. `--approve sh_0004` renders only the shots you name. The soundtrack is built as one continuous track and muxed once, so sound and picture stay in step for the whole episode.
 
-A 27 minute test episode (355 shots, 416 lines, 39,010 frames) built in under five minutes on one core with the fixture voice.
-
 ## Perfecting in the editor
 
 ```bash
-python3 -m cuervo_editor build/episode.json --poses build/poses.json --takes build/takes
+python3 -m cuervo_editor build/episode.json --poses build/poses.json --takes build/takes --world build/world
 ```
 
 Change shots there, download the episode over `build/episode.json`, and run `produce` again. Only the changed shots render.
@@ -65,6 +64,10 @@ Change shots there, download the episode over `build/episode.json`, and run `pro
 python3 -m cuervo_pipeline run episode.json --approve sh_a --out build/
 ```
 
+## Picture
+
+Frames are composed from the world's approved art. `--size 1280x720` sets the frame size. Shots are drawn in parallel, one process per core up to eight. A shot whose art is missing from the world falls back to plain stand-in shapes.
+
 ## What this does not do
 
-The picture is the flat preview renderer: shapes, not drawn characters. The runtime that draws final art is still open. See [runtime-evaluation.md](runtime-evaluation.md).
+It does not generate art with an image model, add music or sound effects, or draw views other than three-quarter. Characters in a scene stand or sit where the cast order puts them. They do not walk across the set.

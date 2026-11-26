@@ -101,6 +101,7 @@ export type SessionState = {
   episode: EpisodeView
   has_poses: boolean
   has_takes: boolean
+  has_world: boolean
   version: number
   undo: number
   redo: number
@@ -131,6 +132,16 @@ export type ServiceKey = {
   base_url: string
   needs_base: boolean
   key_url: string
+}
+
+export type WorldAsset = {
+  asset_id: string
+  kind: "character" | "set"
+  name: string
+  version: string
+  digest: string
+  status: "draft" | "approved"
+  source: string
 }
 
 export type KeyCheck = { ok: boolean; message: string; voices?: { voice_id: string; name: string }[] }
@@ -173,6 +184,9 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
 
 export const api = {
   providers: () => call<Providers>("GET", "/api/providers"),
+  world: (id: string) => call<{ assets: WorldAsset[] }>("GET", `/api/sessions/${id}/world`),
+  worldVerdict: (id: string, asset: string, verdict: "approve" | "reopen") =>
+    call<{ assets: WorldAsset[] }>("POST", `/api/sessions/${id}/world/${asset}/${verdict}`),
   keys: () => call<{ services: ServiceKey[] }>("GET", "/api/settings/keys"),
   saveKey: (name: string, body: { api_key?: string; model?: string; base_url?: string }) =>
     call<{ services: ServiceKey[] }>("PUT", `/api/settings/keys/${name}`, body),

@@ -8,7 +8,7 @@ You work as the director, the editor, and the writer. You give a note in plain w
 
 ```bash
 cd editor && npm install && npm run build && cd ..
-python3 -m cuervo_editor path/to/episode.json --poses path/to/poses.json
+python3 -m cuervo_editor build/episode.json --poses build/poses.json --takes build/takes --world build/world
 ```
 
 Open http://127.0.0.1:8000. Episodes named on the command line open as projects. You can also drop an episode JSON on the page, together with its pose table if the series has one.
@@ -30,6 +30,7 @@ Keys are saved to `~/.cuervo/keys.json`, readable only by that user. `CUERVO_KEY
 | Sidebar | Projects, and the threads inside the open project. A dot marks a thread with changes waiting for review. |
 | Thread | Your directions and the agent's turns: a work log, a reply, and one card per changed shot. |
 | Stage | The frame player, the shot strip, and a timeline of the selected shot's tracks. Script and shot details are tabs. |
+| World | The cast's model sheets and the sets, each with its version and an Approve button. |
 
 A project is one episode with its edit history. A thread is one conversation about it. Several threads can work on the same project.
 
@@ -77,6 +78,7 @@ Projects, threads, and undo history are JSON files under `~/.cuervo/projects`. S
 | --- | --- |
 | `GET /api/providers` | Providers on the agent routes and whether each has a key |
 | `GET /api/settings/keys`, `PUT`, `DELETE /api/settings/keys/{name}` | Read, save, or remove a saved key. `POST .../test` checks it |
+| `GET /api/sessions/{id}/world` | The project's assets. `GET .../world/{asset}.png` is the sheet, `POST .../world/{asset}/approve` or `reopen` sets its status |
 | `GET /api/sessions/{id}/audio/{shot}.wav` | The voice takes for one shot, when the project has a takes folder |
 | `GET`, `POST /api/sessions` | List projects, open an episode as a project |
 | `GET`, `DELETE /api/sessions/{id}` | Read or close a project |

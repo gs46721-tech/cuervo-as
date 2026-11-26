@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from cuervo_ir.contract import allowed_poses
 from cuervo_ir.models import Id, Version
 from cuervo_voice.dub import VoiceProfile
+from cuervo_world.design import CharacterDesign, SetDesign
 
 
 class KitVoice(BaseModel):
@@ -42,6 +43,8 @@ class KitCharacter(BaseModel):
     # The body pose held when nothing else is happening.
     rest_pose: Id = "stand"
     voice: KitVoice
+    # What the character looks like. Their art is built from this once and reused in every frame.
+    design: CharacterDesign | None = None
 
     def profile(self) -> VoiceProfile:
         return VoiceProfile(character_id=self.asset_id, **self.voice.model_dump())
@@ -59,6 +62,7 @@ class KitSet(BaseModel):
     location_id: Id
     version: Version = "1.0.0"
     aliases: list[str] = Field(default_factory=list)
+    design: SetDesign | None = None
 
 
 class SeriesKit(BaseModel):

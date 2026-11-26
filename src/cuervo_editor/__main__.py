@@ -1,6 +1,6 @@
 """Series editor API.
 
-    python3 -m cuervo_editor [episode.json ...] [--poses poses.json] [--takes takes/]
+    python3 -m cuervo_editor [episode.json ...] [--poses poses.json] [--takes takes/] [--world world/]
 
 Episodes named on the command line open as projects. The editor ships none.
 """
@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("episodes", nargs="*", type=Path, help="episode JSON files to open as projects")
     parser.add_argument("--poses", type=Path, help="series pose table for those episodes")
     parser.add_argument("--takes", type=Path, help="folder of voice takes for those episodes, to hear the dialogue")
+    parser.add_argument("--world", type=Path, help="asset library for those episodes, to see the real art")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -36,7 +37,9 @@ def main() -> None:
             _session_id, session = store.open(episode, poses)
             if args.takes:
                 session.takes_dir = str(args.takes.resolve())
-                store.save(session)
+            if args.world:
+                session.world_dir = str(args.world.resolve())
+            store.save(session)
     uvicorn.run(app, host=args.host, port=args.port)
 
 

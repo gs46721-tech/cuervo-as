@@ -38,6 +38,8 @@ def main() -> None:
     make.add_argument("--approve", action="append", default=[], help="render only these shots (default: all)")
     make.add_argument("--no-director", action="store_true", help="cut and act by the built-in rules, with no model calls")
     make.add_argument("--no-review", action="store_true", help="skip the model's review notes")
+    make.add_argument("--world", type=Path, help="the asset library to draw from (default: <out>/world)")
+    make.add_argument("--size", default="640x360", help="frame size, such as 1280x720")
     args = parser.parse_args()
     # Keys saved in the editor's settings work here too.
     Credentials()
@@ -62,6 +64,8 @@ def main() -> None:
                 approved=set(args.approve) or None,
                 director=not args.no_director,
                 review=not args.no_review,
+                world_dir=args.world,
+                size=tuple(int(part) for part in args.size.lower().split("x")),  # type: ignore[arg-type]
             )
         except (ProduceError, ScriptError) as exc:
             raise SystemExit(str(exc)) from exc

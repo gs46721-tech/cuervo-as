@@ -9,8 +9,10 @@ from __future__ import annotations
 import array
 import hashlib
 import json
+import os
 import subprocess
 import wave
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,12 +49,15 @@ class PipelineResult:
     cache: dict[str, dict]
 
 
-def fingerprint(shot: Shot, poses: dict | None, generations: dict[str, str]) -> str:
+def fingerprint(shot: Shot, poses: dict | None, generations: dict[str, str], look: str = "") -> str:
     body = shot.model_dump(mode="json")
     for ref in body["asset_refs"]:
         if ref["asset_id"] in generations:
             ref["version"] = generations[ref["asset_id"]]
     blob = {"shot": body, "poses": poses or {}}
+    if look:
+        # The art and the frame size are part of what a rendered shot is.
+        blob["look"] = look
     return hashlib.sha256(json.dumps(blob, sort_keys=True).encode("utf-8")).hexdigest()
 
 
@@ -94,6 +99,9 @@ def run_episode(
     takes_dir: Path | None = None,
     review: bool = True,
     progress=None,
+    world=None,
+    size: tuple[int, int] | None = None,
+    workers: int | None = None,
 ) -> PipelineResult:
     """Render the approved shots and join them.
 
@@ -113,102 +121,115 @@ def run_episode(
             store = json.loads(cache_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             store = {}
-    total = sum(len(scene.shots) for scene in episode.scenes)
+    # A caller that passes its own draw function is drawn in this process, one shot at a time.
+    custom_draw = render_frame is not render_png
+    if not custom_draw and (world is not None or size is not None):
+
+        def render_frame(episode_, shot_, frame_, poses_):  # noqa: F811
+            return render_png(episode_, shot_, frame_, poses_, world=world, size=size)
+
     done = 0
     sound: list[tuple[int, bytes]] = []
     generations = generations if generations is not None else {}
-    reports: list[ShotReport] = []
-    segments: list[Path] = []
+    # First decide what each shot needs. Then draw the ones that need drawing, several at a time.
+    plan: list[tuple[Shot, str, str]] = []
     for scene in episode.scenes:
         for shot in scene.shots:
-            key = fingerprint(shot, poses, generations)
-            done += 1
-            if progress and (done % 25 == 0 or done == total):
-                progress(done, total)
+            look = ""
+            if world is not None or size is not None:
+                look = f"{world.stamp([ref.asset_id for ref in shot.asset_refs]) if world else ''}:{size}"
+            key = fingerprint(shot, poses, generations, look)
             if shot.shot_id not in approved:
-                reports.append(
-                    ShotReport(
-                        shot_id=shot.shot_id,
-                        status="awaiting_approval",
-                        cache_key=key,
-                        attempts=0,
-                        cost_frames=0,
-                        render_hash=None,
-                        review_note="",
-                    )
-                )
-                continue
-            cached = store.get(key)
-            cached_path = Path(cached["mp4"]) if cached is not None else None
-            if cached is not None and cached_path is not None and cached_path.is_file():
-                reports.append(
-                    ShotReport(
-                        shot_id=shot.shot_id,
-                        status="cached",
-                        cache_key=key,
-                        attempts=0,
-                        cost_frames=0,
-                        render_hash=cached["hash"],
-                        review_note=cached["review_note"],
-                    )
-                )
-                segments.append(cached_path)
-                sound.append((shot.duration_frames, shot_audio(shot, episode.fps, takes_dir)))
-                continue
-            note = _review(router, shot) if review else ""
-            pngs, attempts, error = _render_with_retry(
-                episode, shot, poses, render_frame, max_attempts
-            )
-            if error or not pngs:
-                reports.append(
-                    ShotReport(
-                        shot_id=shot.shot_id,
-                        status="failed",
-                        cache_key=key,
-                        attempts=attempts,
-                        cost_frames=0,
-                        render_hash=None,
-                        review_note=note,
-                        error=error or "no frames",
-                    )
-                )
-                continue
-            digest = hashlib.sha256(b"".join(pngs)).hexdigest()
-            try:
-                mp4 = _encode_shot(out_dir / _safe(shot.shot_id), pngs, episode.fps)
-            except PipelineError as exc:
-                reports.append(
-                    ShotReport(
-                        shot_id=shot.shot_id,
-                        status="failed",
-                        cache_key=key,
-                        attempts=attempts,
-                        cost_frames=0,
-                        render_hash=None,
-                        review_note=note,
-                        error=str(exc),
-                    )
-                )
-                continue
-            store[key] = {"hash": digest, "mp4": str(mp4), "review_note": note}
-            reports.append(
-                ShotReport(
-                    shot_id=shot.shot_id,
-                    status="rendered",
-                    cache_key=key,
-                    attempts=attempts,
-                    cost_frames=len(pngs),
-                    render_hash=digest,
-                    review_note=note,
-                )
-            )
-            segments.append(mp4)
+                plan.append((shot, key, "awaiting_approval"))
+            elif key in store and Path(store[key]["mp4"]).is_file():
+                plan.append((shot, key, "cached"))
+            else:
+                plan.append((shot, key, "render"))
+    todo = [(shot, key) for shot, key, state in plan if state == "render"]
+    drawn: dict[str, tuple] = {}
+    parallel = workers if workers is not None else min(8, os.cpu_count() or 1)
+    if custom_draw or parallel <= 1 or len(todo) < 4:
+        for shot, _key in todo:
+            drawn[shot.shot_id] = _draw_shot(episode, shot, poses, render_frame, max_attempts, out_dir)
+            done += 1
+            if progress and (done % 25 == 0 or done == len(todo)):
+                progress(done, len(todo))
+    else:
+        setup = (episode.model_dump_json(), poses, str(world.path) if world is not None else None, size, max_attempts, str(out_dir))
+        with ProcessPoolExecutor(max_workers=parallel, initializer=_worker_start, initargs=setup) as pool:
+            for shot_id, outcome in pool.map(_worker_draw, [shot.shot_id for shot, _key in todo], chunksize=2):
+                drawn[shot_id] = outcome
+                done += 1
+                if progress and (done % 25 == 0 or done == len(todo)):
+                    progress(done, len(todo))
+
+    reports: list[ShotReport] = []
+    segments: list[Path] = []
+    for shot, key, state in plan:
+        if state == "awaiting_approval":
+            reports.append(ShotReport(shot_id=shot.shot_id, status=state, cache_key=key, attempts=0, cost_frames=0, render_hash=None, review_note=""))
+            continue
+        if state == "cached":
+            cached = store[key]
+            reports.append(ShotReport(shot_id=shot.shot_id, status="cached", cache_key=key, attempts=0, cost_frames=0, render_hash=cached["hash"], review_note=cached["review_note"]))
+            segments.append(Path(cached["mp4"]))
             sound.append((shot.duration_frames, shot_audio(shot, episode.fps, takes_dir)))
+            continue
+        note = _review(router, shot) if review else ""
+        mp4, digest, attempts, error = drawn[shot.shot_id]
+        if error or mp4 is None:
+            reports.append(ShotReport(shot_id=shot.shot_id, status="failed", cache_key=key, attempts=attempts, cost_frames=0, render_hash=None, review_note=note, error=error or "no frames"))
+            continue
+        store[key] = {"hash": digest, "mp4": str(mp4), "review_note": note}
+        reports.append(ShotReport(shot_id=shot.shot_id, status="rendered", cache_key=key, attempts=attempts, cost_frames=shot.duration_frames, render_hash=digest, review_note=note))
+        segments.append(Path(mp4))
+        sound.append((shot.duration_frames, shot_audio(shot, episode.fps, takes_dir)))
     master = _concat(out_dir / "episode.mp4", segments) if segments else None
     if master is not None and takes_dir is not None and any(pcm.strip(b"\x00") for _frames, pcm in sound):
         _add_soundtrack(master, b"".join(pcm for _frames, pcm in sound))
     cache_file.write_text(json.dumps(store), encoding="utf-8")
     return PipelineResult(reports=reports, master=master, cache=store)
+
+
+def _draw_shot(episode, shot, poses, render_frame, max_attempts: int, out_dir: Path) -> tuple:
+    """Draw and encode one shot. Returns (mp4 path, hash, attempts, error)."""
+
+    pngs, attempts, error = _render_with_retry(episode, shot, poses, render_frame, max_attempts)
+    if error or not pngs:
+        return None, None, attempts, error or "no frames"
+    digest = hashlib.sha256(b"".join(pngs)).hexdigest()
+    try:
+        mp4 = _encode_shot(out_dir / _safe(shot.shot_id), pngs, episode.fps)
+    except PipelineError as exc:
+        return None, None, attempts, str(exc)
+    return str(mp4), digest, attempts, None
+
+
+_WORKER: dict = {}
+
+
+def _worker_start(episode_json: str, poses, world_path, size, max_attempts: int, out_dir: str) -> None:
+    """Load the episode and the art once in each drawing process."""
+
+    episode = Episode.model_validate_json(episode_json)
+    world = None
+    if world_path is not None:
+        from cuervo_world import World
+
+        world = World(Path(world_path))
+    _WORKER.update(
+        episode=episode,
+        shots={shot.shot_id: shot for scene in episode.scenes for shot in scene.shots},
+        poses=poses,
+        draw=lambda episode_, shot_, frame_, poses_: render_png(episode_, shot_, frame_, poses_, world=world, size=size),
+        max_attempts=max_attempts,
+        out_dir=Path(out_dir),
+    )
+
+
+def _worker_draw(shot_id: str) -> tuple[str, tuple]:
+    state = _WORKER
+    return shot_id, _draw_shot(state["episode"], state["shots"][shot_id], state["poses"], state["draw"], state["max_attempts"], state["out_dir"])
 
 
 def shot_audio(shot: Shot, fps: int, takes_dir: Path | None) -> bytes:
@@ -296,6 +317,9 @@ def _encode_shot(directory: Path, pngs: list[bytes], fps: int) -> Path:
             str(mp4),
         ]
     )
+    # The frames are in the mp4 now. A half-hour episode would otherwise leave tens of thousands of files.
+    for index in range(len(pngs)):
+        (directory / f"frame_{index:04d}.png").unlink(missing_ok=True)
     return mp4
 
 

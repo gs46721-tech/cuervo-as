@@ -90,6 +90,8 @@ class Session:
         self.poses = poses
         # Folder of recorded voice takes, when the episode came from the pipeline.
         self.takes_dir: str | None = None
+        # Folder of approved art. Without it the preview draws plain shapes.
+        self.world_dir: str | None = None
         self.past: list[dict] = []
         self.future: list[dict] = []
         # Goes up every time the episode changes, so a frame URL can be cached.
@@ -132,6 +134,7 @@ class Session:
             "episode": self.episode.model_dump(mode="json"),
             "poses": self.poses,
             "takes_dir": self.takes_dir,
+            "world_dir": self.world_dir,
             "past": self.past,
             "future": self.future,
             "version": self.version,
@@ -144,6 +147,7 @@ class Session:
         session.created_at = data.get("created_at", session.created_at)
         session.updated_at = data.get("updated_at", session.created_at)
         session.takes_dir = data.get("takes_dir")
+        session.world_dir = data.get("world_dir")
         session.past = list(data.get("past", []))
         session.future = list(data.get("future", []))
         session.version = int(data.get("version", 0))
@@ -221,6 +225,7 @@ def session_view(session: Session) -> dict:
         "episode": summarize(session.episode),
         "has_poses": bool(session.poses),
         "has_takes": bool(session.takes_dir),
+        "has_world": bool(session.world_dir),
         "version": session.version,
         "undo": len(session.past),
         "redo": len(session.future),

@@ -13,6 +13,7 @@ type Props = {
   onPalette: () => void
   onTheme: () => void
   onSettings: () => void
+  onWorld: () => void
   onRename: (thread: Thread, title: string) => void
   onDeleteThread: (thread: Thread) => void
   onDeleteProject: (card: SessionCard) => void
@@ -33,6 +34,12 @@ export function Sidebar(props: Props) {
       <button className="btn wide" onClick={props.onOpen}>
         {icons.folder} Open episode
       </button>
+
+      {state ? (
+        <button className="btn wide ghost world-btn" onClick={props.onWorld}>
+          {icons.film} World: cast and sets
+        </button>
+      ) : null}
 
       <div className="side-scroll">
         <h2>Projects</h2>

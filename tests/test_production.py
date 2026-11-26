@@ -308,3 +308,93 @@ def test_editor_serves_the_voice_track_for_a_shot(tmp_path):
     # The second scene starts where the first one ends on the episode clock.
     yard = [item for item in opened["episode"]["shots"] if item["scene_id"] == opened["episode"]["scenes"][1]["scene_id"]]
     assert yard[0]["start_frame"] == opened["episode"]["scenes"][0]["duration_frames"]
+
+
+# -- the world --------------------------------------------------------------
+
+
+def _designed_kit() -> SeriesKit:
+    data = _kit().model_dump(mode="json")
+    data["characters"][0]["design"] = {"top": "#aa3322", "hair_style": "bun"}
+    data["sets"][0]["design"] = {"furniture": [{"kind": "sofa", "x": 0, "width": 400}]}
+    return SeriesKit.model_validate(data)
+
+
+def test_the_world_is_built_once_and_an_approved_look_is_frozen(tmp_path):
+    from cuervo_world import World, WorldError
+
+    kit = _designed_kit()
+    world = World(tmp_path)
+    assert world.build(kit) == ["char_ada", "char_bo", "bg_workshop", "bg_yard"]
+    assert world.build(kit) == []
+    assert (tmp_path / "characters" / "char_ada" / "1.0.0" / "mouth_AA.png").is_file()
+    assert world.sheet_path("char_ada").name == "sheet.png"
+
+    # A draft can be redesigned in place.
+    data = kit.model_dump(mode="json")
+    data["characters"][0]["design"]["top"] = "#2255aa"
+    assert World(tmp_path).build(SeriesKit.model_validate(data)) == ["char_ada"]
+    # An approved look cannot, until the kit gives it a new version.
+    approved = World(tmp_path)
+    approved.approve("char_ada")
+    data["characters"][0]["design"]["top"] = "#00aa00"
+    with pytest.raises(WorldError, match="new version"):
+        World(tmp_path).build(SeriesKit.model_validate(data))
+    data["characters"][0]["version"] = "1.1.0"
+    assert World(tmp_path).build(SeriesKit.model_validate(data)) == ["char_ada"]
+    # The old version's art is still on disk for the shots that pin it.
+    assert World(tmp_path).character("char_ada", "1.0.0") is not None
+
+
+def test_a_character_is_the_same_drawing_in_every_frame(tmp_path):
+    """Frames are composed from the approved parts, so the head is identical wherever it appears."""
+
+    from io import BytesIO
+
+    from PIL import Image
+
+    from cuervo_runtime.draw import render_png
+    from cuervo_world import World
+
+    kit = _designed_kit()
+    result = produce(SCRIPT, kit, tmp_path, router=None, through="animation", log=lambda _line: None)
+    world = World(tmp_path / "world")
+    shot = result.episode.scenes[0].shots[0]
+    plain = render_png(result.episode, shot, 0, kit.poses)
+    drawn = render_png(result.episode, shot, 0, kit.poses, world=world)
+    assert drawn != plain
+    assert drawn == render_png(result.episode, shot, 0, kit.poses, world=World(tmp_path / "world"))
+    # The top color in the kit is the top color on screen.
+    colors = Image.open(BytesIO(drawn)).convert("RGB").getcolors(1_000_000)
+    assert any(color == (170, 51, 34) and count > 100 for count, color in colors)
+    # Twice the frame size is the same picture at twice the size.
+    assert Image.open(BytesIO(render_png(result.episode, shot, 0, kit.poses, world=world, size=(1280, 720)))).size == (1280, 720)
+
+
+def test_new_art_redraws_only_the_shots_that_use_it(tmp_path):
+    kit = _designed_kit()
+    first = produce(SCRIPT, kit, tmp_path, router=None, log=lambda _line: None)
+    assert {report.status for report in first.render.reports} == {"rendered"}
+    assert any("not approved yet" in note.text for note in first.notes)
+    data = kit.model_dump(mode="json")
+    data["sets"][1]["design"] = {"kind": "exterior", "time": "night"}
+    second = produce(SCRIPT, SeriesKit.model_validate(data), tmp_path, router=None, log=lambda _line: None)
+    yard = {shot.shot_id for shot in second.episode.scenes[1].shots}
+    assert {report.shot_id for report in second.render.reports if report.status == "rendered"} == yard
+
+
+def test_editor_shows_the_world_and_approves_a_look(tmp_path):
+    result = produce(SCRIPT, _designed_kit(), tmp_path, router=None, through="animation", log=lambda _line: None)
+    app = create_app(ProviderRouter({}), background=False)
+    client = TestClient(app)
+    opened = client.post("/api/sessions", json={"episode": result.episode.model_dump(mode="json")}).json()
+    session_id = opened["session_id"]
+    plain = client.get(f"/api/sessions/{session_id}/frames/sh_0001/0.png").content
+    assert client.get(f"/api/sessions/{session_id}/world").json() == {"assets": []}
+    app.state.store.get(session_id).world_dir = str(tmp_path / "world")
+    assert client.get(f"/api/sessions/{session_id}/frames/sh_0001/0.png").content != plain
+    assets = client.get(f"/api/sessions/{session_id}/world").json()["assets"]
+    assert [item["status"] for item in assets] == ["draft"] * 4
+    assert client.get(f"/api/sessions/{session_id}/world/char_ada.png").content.startswith(b"\x89PNG")
+    approved = client.post(f"/api/sessions/{session_id}/world/char_ada/approve").json()["assets"]
+    assert approved[0]["status"] == "approved"

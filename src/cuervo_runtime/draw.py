@@ -21,9 +21,17 @@ def render_png(
     shot: Shot,
     frame: int,
     library: dict[str, dict[str, float]] | None = None,
+    world=None,
+    size: tuple[int, int] | None = None,
 ) -> bytes:
+    """One frame. With a world that holds this shot's art, the cast is drawn from its parts."""
+
     if frame < 0 or frame >= shot.duration_frames:
         raise ValueError(f"frame {frame} is outside shot {shot.shot_id}")
+    if world is not None:
+        drawn = _render_from_world(episode, shot, frame, library, world, size or (WIDTH, HEIGHT))
+        if drawn is not None:
+            return drawn
     backdrop = _swatch(shot_background(episode, shot))
     image = Image.new("RGB", (WIDTH, HEIGHT), backdrop)
     draw = ImageDraw.Draw(image)
@@ -40,6 +48,42 @@ def render_png(
         _draw_actor(draw, actor, controls, _camera_pan(shot), shot.camera.transform.scale)
     buffer = BytesIO()
     image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _render_from_world(episode: Episode, shot: Shot, frame: int, library, world, size: tuple[int, int]) -> bytes | None:
+    """Cut-out render. Returns None when the world is missing art for this shot, so shapes are used."""
+
+    from cuervo_runtime.puppet import UNIT, backdrop, draw_character
+
+    versions = {(ref.role, ref.asset_id): ref.version for ref in shot.asset_refs}
+    cast = []
+    for actor in sorted(shot.actors, key=lambda item: item.depth):
+        art = world.character(actor.character_id, versions.get(("character", actor.character_id), ""))
+        if art is None:
+            return None
+        cast.append((actor, art))
+    width, height = size
+    ratio = width / WIDTH
+    zoom = shot.camera.transform.scale
+    pan = _camera_pan(shot)
+    setting = shot_background(episode, shot)
+    plate = world.plate(setting, versions.get(("background", setting), ""))
+    if plate is not None:
+        image = backdrop(plate, size, (pan[0] * ratio, pan[1] * ratio), zoom)
+    else:
+        image = Image.new("RGBA", size, (*_swatch(setting), 255))
+    for actor, art in cast:
+        if not actor.visible:
+            continue
+        controls = controls_at(shot, actor.actor_id, frame, library)
+        spoken = viseme_at(shot, actor.actor_id, frame)
+        base_x = (WIDTH / 2 + actor.stage.x * 0.7 - pan[0]) * ratio
+        base_y = (HEIGHT * 0.72 - 8 - actor.stage.y * 0.4 + pan[1]) * ratio
+        hips = (width / 2 + (base_x - width / 2) * zoom, height / 2 + (base_y - height / 2) * zoom)
+        draw_character(image, art, controls, spoken[0] if spoken else None, hips, UNIT * ratio * zoom, "left" in actor.facing)
+    buffer = BytesIO()
+    image.convert("RGB").save(buffer, format="PNG")
     return buffer.getvalue()
 
 

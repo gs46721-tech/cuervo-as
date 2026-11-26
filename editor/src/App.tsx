@@ -17,6 +17,7 @@ import { Settings } from "./Settings"
 import { Sidebar } from "./Sidebar"
 import { Stage } from "./Stage"
 import { type Draft, ThreadView } from "./ThreadView"
+import { WorldView } from "./World"
 
 type Toast = { text: string; tone: "error" | "info"; key: number }
 
@@ -55,6 +56,7 @@ export function App() {
   const [stageOpen, setStageOpen] = useState(() => stored("cuervo.stage", STAGE_FLOATS))
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [worldOpen, setWorldOpen] = useState(false)
   const [dropping, setDropping] = useState(false)
   const [booted, setBooted] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
@@ -421,6 +423,7 @@ export function App() {
     }
     list.unshift(
       { id: "new", group: "Project", label: "New thread", run: () => setThreadId(null) },
+      { id: "world", group: "Project", label: "World: cast and sets", run: () => setWorldOpen(true) },
       { id: "export", group: "Project", label: "Download episode JSON", run: () => window.location.assign(exportUrl(state.session_id)) },
       { id: "undo", group: "Project", label: "Undo", hint: "⌘Z", run: () => history("undo") },
       { id: "redo", group: "Project", label: "Redo", hint: "⇧⌘Z", run: () => history("redo") },
@@ -503,6 +506,7 @@ export function App() {
           onPalette={() => setPaletteOpen(true)}
           onTheme={toggleTheme}
           onSettings={() => setSettingsOpen(true)}
+          onWorld={() => setWorldOpen(true)}
           onRename={(item, title) => state && void run(api.renameThread(state.session_id, item.thread_id, title))}
           onDeleteThread={(item) => {
             if (state && window.confirm(`Delete the thread "${item.title}"? Changes it already applied stay in the episode.`)) {
@@ -577,6 +581,7 @@ export function App() {
         />
       ) : null}
 
+      {worldOpen && state ? <WorldView state={state} onClose={() => setWorldOpen(false)} onChanged={() => undefined} /> : null}
       {settingsOpen ? (
         <Settings
           onClose={() => setSettingsOpen(false)}

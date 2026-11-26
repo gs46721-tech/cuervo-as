@@ -32,6 +32,7 @@ from cuervo_pipeline.series import SeriesKit
 from cuervo_runtime.draw import render_png
 from cuervo_voice.synth import VoiceError, VoiceSynth, default_synths
 from cuervo_voice.takes import Take, record_take
+from cuervo_world import World, WorldError
 
 STAGES = ("script", "storyboard", "animation", "polish")
 
@@ -48,6 +49,7 @@ class Production:
     episode: Episode | None = None
     notes: list[Note] = field(default_factory=list)
     render: PipelineResult | None = None
+    world: World | None = None
     new_takes: int = 0
     reused_takes: int = 0
 
@@ -88,6 +90,8 @@ def produce(
     director: bool = True,
     review: bool = True,
     synths: dict[str, VoiceSynth] | None = None,
+    world_dir: Path | None = None,
+    size: tuple[int, int] | None = None,
     log=print,
 ) -> Production:
     """Run the stages up to `through`. `approved=None` approves every shot for render."""
@@ -100,6 +104,17 @@ def produce(
     if director and creative is None:
         log("  note: no model provider is configured, so shots are cut and acted by the built-in rules")
     reviewer = router if review and _usable(router, "review") else None
+
+    # The world comes first: every character and set is built once, before anything is animated.
+    started = time.time()
+    world = World(world_dir or out_dir / "world")
+    try:
+        world.build(kit, log=log)
+    except WorldError as exc:
+        raise ProduceError(str(exc)) from exc
+    result.world = world
+    drafts = [entry["name"] for entry in world.view() if entry["status"] != "approved"]
+    log(f"world       {len(world.view())} assets, {len(drafts)} waiting for approval  ({time.time() - started:.1f}s)")
 
     # 1. Script
     started = time.time()
@@ -162,7 +177,7 @@ def produce(
         episode = build_episode(board, kit, takes, acting)
         _write(episode_file, episode.model_dump_json(indent=2))
         _write(out_dir / "poses.json", json.dumps(kit.poses, indent=2))
-        _contact_sheets(episode, kit, out_dir / "boards")
+        _contact_sheets(episode, kit, out_dir / "boards", world)
     result.episode = episode
     frames = sum(shot.duration_frames for scene in episode.scenes for shot in scene.shots)
     log(
@@ -176,6 +191,8 @@ def produce(
     # 4. Polish: checks, an advisory review, then render what is approved.
     started = time.time()
     notes = check_episode(episode, takes_dir)
+    for name in drafts:
+        notes.append(Note(shot_id="", severity="look", source="check", text=f"The design for {name} is not approved yet."))
     if reviewer is not None:
         notes.extend(review_scenes(episode, reviewer, log=log))
     result.notes = notes
@@ -188,6 +205,8 @@ def produce(
         approved=every if approved is None else approved,
         poses=kit.poses,
         takes_dir=takes_dir,
+        world=world,
+        size=size,
         review=False,
         progress=lambda done, total: log(f"  render {done}/{total}"),
     )
@@ -219,7 +238,7 @@ def _load(path: Path, model):
         raise ProduceError(f"{path.name} does not load: {exc}") from exc
 
 
-def _contact_sheets(episode: Episode, kit: SeriesKit, directory: Path) -> None:
+def _contact_sheets(episode: Episode, kit: SeriesKit, directory: Path, world=None) -> None:
     """One picture per scene: a panel for every shot, with its number, size, length, and first line."""
 
     directory.mkdir(parents=True, exist_ok=True)
@@ -235,7 +254,7 @@ def _contact_sheets(episode: Episode, kit: SeriesKit, directory: Path) -> None:
                 frame = (first.start_frame + first.end_frame) // 2
             else:
                 frame = shot.duration_frames // 2
-            panel = Image.open(BytesIO(render_png(episode, shot, frame, kit.poses))).resize((width, height))
+            panel = Image.open(BytesIO(render_png(episode, shot, frame, kit.poses, world=world))).resize((width, height))
             left, top = (index % columns) * width, (index // columns) * (height + caption)
             sheet.paste(panel, (left, top))
             draw.rectangle((left, top, left + width - 1, top + height - 1), outline=(60, 60, 64))

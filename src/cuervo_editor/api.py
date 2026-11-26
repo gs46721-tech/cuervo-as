@@ -25,6 +25,7 @@ from cuervo_ir.providers.router import ProviderRouter, build_default_router
 from cuervo_runtime.draw import render_png
 from cuervo_pipeline.run import shot_audio
 from cuervo_voice.takes import SAMPLE_RATE
+from cuervo_world import World, WorldError
 from cuervo_editor.agent import run_turn
 from cuervo_editor.store import (
     EditorError,
@@ -221,7 +222,7 @@ def create_app(
     def frame(session_id: str, shot_id: str, frame: int, v: int | None = None):
         session = _session(app, session_id)
         # `v` is the project version the page asked for. That picture never changes.
-        return _png(session.episode, shot_id, frame, session.poses, cache=v == session.version)
+        return _png(session.episode, shot_id, frame, session.poses, cache=v == session.version, world=world_of(session))
 
     @app.get("/api/sessions/{session_id}/changes/{change_id}/frames/{frame}.png")
     def change_frame(session_id: str, change_id: str, frame: int):
@@ -236,7 +237,42 @@ def create_app(
             revised = preview_change(session, change)
         except EditorError as exc:
             raise HTTPException(409, str(exc)) from exc
-        return _png(revised, change.shot_id, frame, session.poses)
+        return _png(revised, change.shot_id, frame, session.poses, world=world_of(session))
+
+    worlds: dict[str, World] = {}
+
+    def world_of(session: Session) -> World | None:
+        if not session.world_dir:
+            return None
+        if session.world_dir not in worlds:
+            worlds[session.world_dir] = World(Path(session.world_dir))
+        return worlds[session.world_dir]
+
+    @app.get("/api/sessions/{session_id}/world")
+    def world_assets(session_id: str):
+        """The cast and sets this project draws from, and whether each look is approved."""
+
+        world = world_of(_session(app, session_id))
+        return {"assets": world.view() if world else []}
+
+    @app.get("/api/sessions/{session_id}/world/{asset_id}.png")
+    def world_sheet(session_id: str, asset_id: str):
+        world = world_of(_session(app, session_id))
+        path = world.sheet_path(asset_id) if world else None
+        if path is None:
+            raise HTTPException(404, "no art for that asset")
+        return Response(content=path.read_bytes(), media_type="image/png", headers={"cache-control": "no-store"})
+
+    @app.post("/api/sessions/{session_id}/world/{asset_id}/{verdict}")
+    def world_approve(session_id: str, asset_id: str, verdict: str):
+        world = world_of(_session(app, session_id))
+        if world is None or verdict not in ("approve", "reopen"):
+            raise HTTPException(404, "unknown asset or action")
+        try:
+            world.approve(asset_id, verdict == "approve")
+        except WorldError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"assets": world.view()}
 
     @app.get("/api/sessions/{session_id}/audio/{shot_id}.wav")
     def audio(session_id: str, shot_id: str):
@@ -437,13 +473,13 @@ def _lookup(find, key: str):
         raise HTTPException(404, str(exc)) from exc
 
 
-def _png(episode: Episode, shot_id: str, frame: int, poses, cache: bool = False) -> Response:
+def _png(episode: Episode, shot_id: str, frame: int, poses, cache: bool = False, world=None) -> Response:
     try:
         shot = find_shot(episode, shot_id)
     except EditorError as exc:
         raise HTTPException(404, "unknown shot") from exc
     try:
-        png = render_png(episode, shot, frame, poses)
+        png = render_png(episode, shot, frame, poses, world=world)
     except Exception as exc:
         raise HTTPException(422, str(exc)) from exc
     policy = "private, max-age=86400, immutable" if cache else "no-store"
